@@ -1,0 +1,38 @@
+{
+  "name": "@dsh-plugins/goal-tracker",
+  "version": "0.1.0",
+  "description": "OpenCode-style goal tracker for the DSH web GUI: phase badge, round stepper with progress bar, live elapsed time, blocked reason, and completion summary above the composer.",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "src/",
+    "README.md"
+  ],
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ]
+    }
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "plugin",
+    "goal",
+    "opencode"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "react": "^18.2.0"
+  }
+}

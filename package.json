@@ -1,0 +1,10 @@
+{
+  "name": "dsh-plugins",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Community plugins for the DeepSeek Harness (DSH) web GUI",
+  "license": "MIT",
+  "workspaces": [
+    "plugins/*"
+  ]
+}
