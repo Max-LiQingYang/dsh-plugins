@@ -1,16 +1,15 @@
 // Browser half of @dsh-plugins/goal-tracker — client module format.
 //
 // Auto-generated twin of src/dynamic-client.js (verified live as gtrack-1
-// pkg-14). Loaded by the DSH web app through the exports["./client"] bundle
+// pkg-17). Loaded by the DSH web app through the exports["./client"] bundle
 // route and executed as a classic script.
 //
 // Features: control verbs via ctx.get("remote.goals"); completion-policy
 // modes embedded in the objective (agent / run-all-rounds / hybrid min+max /
-// true-unlimited — never self-completes, no complete button); agent mode
-// exposes an adjustable round cap; editor prefills the current mode; default
-// 16 rounds with an unlimited toggle; live round count via the host
-// goal/live bridge when running as a dynamic package (host builtin), else
-// degrades to the projection; elegant sheen sweep; blocked banner.
+// true-unlimited); agent mode cap input; editor prefill; live round bridge
+// via host goal/live (dynamic only); round-limit UX (raise-cap button +
+// friendly banner, resume returns after the cap is raised); sheen sweep;
+// blocked banner; relative times.
 window.__ModuleLoader__.load({
   id: "@dsh-plugins/goal-tracker",
   factory: (require) => {
@@ -133,6 +132,8 @@ function apply(ctx){
       activationDisarmed: zh ? '未武装' : 'disarmed',
       pause: zh ? '暂停' : 'Pause',
       resume: zh ? '恢复' : 'Resume',
+      raiseCap: zh ? '提高上限' : 'Raise cap',
+      exhaustedHint: zh ? '轮次已耗尽，请先提高轮数上限（✎ 编辑或完成策略）后再恢复' : 'Round budget exhausted — raise the cap (✎ edit or policy) before resuming',
       completeBtn: zh ? '完成' : 'Complete',
       edit: zh ? '编辑' : 'Edit',
       clear: zh ? '清除' : 'Clear',
@@ -311,7 +312,13 @@ function apply(ctx){
           const result = await action()
           if (result && result.ok === false) {
             const err = result.error || {}
-            setActionError((err.message || '') + (err.code ? ' (' + err.code + ')' : ''))
+            const raw = (err.message || '') + (err.code ? ' (' + err.code + ')' : '')
+            // Friendly mapping for the exhausted-round resume rejection.
+            if ((err.code === 'GOAL_INVALID_TRANSITION' || /exhausted/i.test(err.message || '')) && /maxGoalRounds|rounds/i.test(err.message || '')) {
+              setActionError(T.exhaustedHint)
+            } else {
+              setActionError(raw)
+            }
           }
           return result
         } catch (e) {
@@ -410,6 +417,9 @@ function apply(ctx){
       const updatedAt = typeof projection.updatedAt === 'number' ? projection.updatedAt : 0
       const revision = typeof goal.revision === 'number' ? goal.revision : 0
       const blocked = goal.blockedReason && typeof goal.blockedReason === 'object' ? goal.blockedReason : null
+      // Exhausted only while the CURRENT cap is still reached: raising the cap
+      // makes resume legal again even though the blocked reason still says round-limit.
+      const exhausted = blocked !== null && blocked.code === 'round-limit' && displayRounds >= maxRounds
 
       const percent = unlimited ? Math.min(100, Math.round((displayRounds / 9999) * 100)) : Math.min(100, Math.round((displayRounds / maxRounds) * 100))
       const elapsedMs = phase === 'complete' ? (updatedAt - createdAt) : (now - createdAt)
@@ -509,7 +519,12 @@ function apply(ctx){
       const controls = []
       if (verbs) {
         if (phase === 'active' && verbs.pause) controls.push(iconBtn('pause', T.pause, '⏸', () => runAction(verbs.pause)))
-        if ((phase === 'paused' || phase === 'blocked') && verbs.resume) controls.push(iconBtn('resume', T.resume, '▶', () => runAction(verbs.resume)))
+        if (phase === 'blocked' && exhausted && verbs.edit) {
+          // Round budget exhausted: resume would be rejected; offer raising the cap.
+          controls.push(iconBtn('raise', T.raiseCap, '↥', () => { setDraft(objective); setRoundsDraft(''); setEditing(true) }))
+        } else if ((phase === 'paused' || phase === 'blocked') && verbs.resume) {
+          controls.push(iconBtn('resume', T.resume, '▶', () => runAction(verbs.resume)))
+        }
         // In unlimited mode the goal must never be completed: no ✓ button.
         if (phase === 'active' && !unlimited && verbs.complete) controls.push(iconBtn('complete', T.completeBtn, '✓', () => runAction(verbs.complete)))
         if (verbs.edit) controls.push(iconBtn('edit', T.edit, '✎', () => { setDraft(objective); setRoundsDraft(''); setEditing(true) }))
@@ -546,7 +561,8 @@ function apply(ctx){
         banners.push(react.createElement('div', { key: 'blocked', className: 'gt-banner gt-banner-blocked', role: 'alert' }, [
           react.createElement('span', { key: 'code', className: 'gt-banner-code' },
             T.blocked + (typeof blocked.code === 'string' ? ' · ' + blocked.code : '')),
-          react.createElement('span', { key: 'msg' }, typeof blocked.message === 'string' ? blocked.message : ''),
+          react.createElement('span', { key: 'msg' },
+            (typeof blocked.message === 'string' ? blocked.message : '') + (exhausted ? ' — ' + T.exhaustedHint : '')),
         ]))
       }
       if (actionError !== null) {

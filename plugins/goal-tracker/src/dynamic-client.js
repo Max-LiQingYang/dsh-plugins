@@ -1,7 +1,7 @@
 // @dsh-plugins/goal-tracker — dynamic-plugin source for cordis_define.
 //
 // This file is the `code.client` body verified live in a DSH session
-// (pluginId gtrack-1, package pkg-14; requires the pkg-14 host half for the live-round bridge). It renders the enhanced OpenCode-style
+// (pluginId gtrack-1, package pkg-17; requires the pkg-14 host half for the live-round bridge). It renders the enhanced OpenCode-style
 // goal tracker as the installable client module (../client.js), but through
 // the dynamic-plugin toolset — no host composition change, no restart.
 //
@@ -126,6 +126,8 @@ return {
       activationDisarmed: zh ? '未武装' : 'disarmed',
       pause: zh ? '暂停' : 'Pause',
       resume: zh ? '恢复' : 'Resume',
+      raiseCap: zh ? '提高上限' : 'Raise cap',
+      exhaustedHint: zh ? '轮次已耗尽，请先提高轮数上限（✎ 编辑或完成策略）后再恢复' : 'Round budget exhausted — raise the cap (✎ edit or policy) before resuming',
       completeBtn: zh ? '完成' : 'Complete',
       edit: zh ? '编辑' : 'Edit',
       clear: zh ? '清除' : 'Clear',
@@ -304,7 +306,13 @@ return {
           const result = await action()
           if (result && result.ok === false) {
             const err = result.error || {}
-            setActionError((err.message || '') + (err.code ? ' (' + err.code + ')' : ''))
+            const raw = (err.message || '') + (err.code ? ' (' + err.code + ')' : '')
+            // Friendly mapping for the exhausted-round resume rejection.
+            if ((err.code === 'GOAL_INVALID_TRANSITION' || /exhausted/i.test(err.message || '')) && /maxGoalRounds|rounds/i.test(err.message || '')) {
+              setActionError(T.exhaustedHint)
+            } else {
+              setActionError(raw)
+            }
           }
           return result
         } catch (e) {
@@ -403,6 +411,9 @@ return {
       const updatedAt = typeof projection.updatedAt === 'number' ? projection.updatedAt : 0
       const revision = typeof goal.revision === 'number' ? goal.revision : 0
       const blocked = goal.blockedReason && typeof goal.blockedReason === 'object' ? goal.blockedReason : null
+      // Exhausted only while the CURRENT cap is still reached: raising the cap
+      // makes resume legal again even though the blocked reason still says round-limit.
+      const exhausted = blocked !== null && blocked.code === 'round-limit' && displayRounds >= maxRounds
 
       const percent = unlimited ? Math.min(100, Math.round((displayRounds / 9999) * 100)) : Math.min(100, Math.round((displayRounds / maxRounds) * 100))
       const elapsedMs = phase === 'complete' ? (updatedAt - createdAt) : (now - createdAt)
@@ -502,7 +513,12 @@ return {
       const controls = []
       if (verbs) {
         if (phase === 'active' && verbs.pause) controls.push(iconBtn('pause', T.pause, '⏸', () => runAction(verbs.pause)))
-        if ((phase === 'paused' || phase === 'blocked') && verbs.resume) controls.push(iconBtn('resume', T.resume, '▶', () => runAction(verbs.resume)))
+        if (phase === 'blocked' && exhausted && verbs.edit) {
+          // Round budget exhausted: resume would be rejected; offer raising the cap.
+          controls.push(iconBtn('raise', T.raiseCap, '↥', () => { setDraft(objective); setRoundsDraft(''); setEditing(true) }))
+        } else if ((phase === 'paused' || phase === 'blocked') && verbs.resume) {
+          controls.push(iconBtn('resume', T.resume, '▶', () => runAction(verbs.resume)))
+        }
         // In unlimited mode the goal must never be completed: no ✓ button.
         if (phase === 'active' && !unlimited && verbs.complete) controls.push(iconBtn('complete', T.completeBtn, '✓', () => runAction(verbs.complete)))
         if (verbs.edit) controls.push(iconBtn('edit', T.edit, '✎', () => { setDraft(objective); setRoundsDraft(''); setEditing(true) }))
@@ -539,7 +555,8 @@ return {
         banners.push(React.createElement('div', { key: 'blocked', className: 'gt-banner gt-banner-blocked', role: 'alert' }, [
           React.createElement('span', { key: 'code', className: 'gt-banner-code' },
             T.blocked + (typeof blocked.code === 'string' ? ' · ' + blocked.code : '')),
-          React.createElement('span', { key: 'msg' }, typeof blocked.message === 'string' ? blocked.message : ''),
+          React.createElement('span', { key: 'msg' },
+            (typeof blocked.message === 'string' ? blocked.message : '') + (exhausted ? ' — ' + T.exhaustedHint : '')),
         ]))
       }
       if (actionError !== null) {
