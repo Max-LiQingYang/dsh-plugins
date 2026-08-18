@@ -93,10 +93,39 @@ and its providers stay on the host plane, and the tool registers into the layere
 | `provider` | `spawn` | host `subagents` provider used by `agent` nodes |
 | `maxParallel` | `6` | concurrent agent nodes per super-step |
 
+## Visualization (web tool card)
+
+The package ships a client half (`client.js`, declared via `dsh.client`) that
+registers a keyed `tool.call.toolview` for the wire tool name `graph`, so every
+`graph` call renders as a card in the DSH web conversation instead of the
+generic JSON row:
+
+- **Topology** — layered layout by BFS distance from the entry (cycles stay
+  legible: back-edges dip below as bezier arcs, self-loops arc overhead).
+  `agent` nodes are brand-stroked ◆, `js` nodes plain ◇, the entry is labeled,
+  static edges are solid arrows, conditional `router` edges dashed stubs.
+- **Live state** — while the call runs the card pulses with the topology
+  parsed straight from the frozen call args (`argsRaw`).
+- **Settled replay** — the structured result reaches the card through the
+  host tool's `presentationMeta` projection (the `meta` of the tool/result
+  node): per-node run counts and durations (`×3 4.2s`), an endReason badge,
+  and a **step scrubber** that replays each super-step (which frontier ran,
+  where routing went) with the traversed edge highlighted — loops visibly
+  walk backwards. `state & trace` expands the final state JSON.
+- Dry-run calls render their validation issues and cycle report; failed calls
+  render the error text.
+
+The card needs no host events or polling: it is a pure function of the frozen
+`ToolCallBlock`. Load it either as a client module (the `dsh.client` scan, after
+restart) or as a dynamic single-process trial: paste `src/dynamic-client.js`
+into a `cordis_define` `code.client` and `cordis_run` it. The two variants are
+functionally identical — keep them in sync.
+
 ## Test
 
 ```sh
 node test/engine.test.mjs   # 24 headless assertions: cycles, routing, fan-out, maxSteps, abort
+node test/client.test.mjs   # 18 assertions on the tool card's pure helpers (parse/layout/fold)
 ```
 
 ## Trust

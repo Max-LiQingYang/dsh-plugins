@@ -1,27 +1,43 @@
 {
   "name": "@dsh-plugins/graph",
-  "version": "0.1.0",
-  "description": "LangGraph-style graph work mode for DeepSeek Harness: a `graph` model tool that runs state graphs of subagent and JS nodes with static/conditional edges, first-class cycles, and unbounded loops.",
+  "version": "0.2.0",
+  "description": "LangGraph-style graph work mode for DeepSeek Harness: a `graph` model tool that runs state graphs of subagent and JS nodes with static/conditional edges, first-class cycles, and unbounded loops — plus a web tool card visualizing topology and step-by-step execution.",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
     ".": "./lib/index.js",
     "./engine": "./lib/engine.js",
+    "./client": "./client.js",
     "./package.json": "./package.json"
   },
   "files": [
     "lib/index.js",
     "lib/engine.js",
-    "test/engine.test.mjs",
+    "client.js",
+    "src/",
+    "test/",
     "README.md"
   ],
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ]
+    }
+  },
   "keywords": [
     "dsh",
     "deepseek-harness",
     "plugin",
     "langgraph",
     "agent-orchestration",
-    "graph"
+    "graph",
+    "visualization"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "peerDependencies": {
+    "react": "^18.2.0"
+  }
 }
