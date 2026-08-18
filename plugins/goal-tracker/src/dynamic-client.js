@@ -1,7 +1,7 @@
 // @dsh-plugins/goal-tracker — dynamic-plugin source for cordis_define.
 //
 // This file is the `code.client` body verified live in a DSH session
-// (pluginId gtrack-1, package pkg-17; requires the pkg-14 host half for the live-round bridge). It renders the enhanced OpenCode-style
+// (pluginId gtrack-1, package pkg-18; requires the pkg-14 host half for the live-round bridge). It renders the enhanced OpenCode-style
 // goal tracker as the installable client module (../client.js), but through
 // the dynamic-plugin toolset — no host composition change, no restart.
 //
@@ -113,7 +113,6 @@ return {
       blocked: zh ? '受阻' : 'Blocked',
       complete: zh ? '已完成' : 'Completed',
       round: zh ? '轮次' : 'Round',
-      elapsed: zh ? '耗时' : 'elapsed',
       goal: zh ? '目标' : 'GOAL',
       created: zh ? '创建于' : 'Created',
       updated: zh ? '更新于' : 'Updated',
@@ -127,7 +126,7 @@ return {
       pause: zh ? '暂停' : 'Pause',
       resume: zh ? '恢复' : 'Resume',
       raiseCap: zh ? '提高上限' : 'Raise cap',
-      exhaustedHint: zh ? '轮次已耗尽，请先提高轮数上限（✎ 编辑或完成策略）后再恢复' : 'Round budget exhausted — raise the cap (✎ edit or policy) before resuming',
+      exhaustedFriendly: zh ? '轮次已跑满，目标已自动受阻；提高上限可继续推进' : 'Round budget exhausted — the goal was auto-blocked. Raise the cap to continue',
       completeBtn: zh ? '完成' : 'Complete',
       edit: zh ? '编辑' : 'Edit',
       clear: zh ? '清除' : 'Clear',
@@ -309,7 +308,7 @@ return {
             const raw = (err.message || '') + (err.code ? ' (' + err.code + ')' : '')
             // Friendly mapping for the exhausted-round resume rejection.
             if ((err.code === 'GOAL_INVALID_TRANSITION' || /exhausted/i.test(err.message || '')) && /maxGoalRounds|rounds/i.test(err.message || '')) {
-              setActionError(T.exhaustedHint)
+              setActionError(T.exhaustedFriendly)
             } else {
               setActionError(raw)
             }
@@ -500,13 +499,12 @@ return {
 
       // normal bar
       const meta = React.createElement('div', { key: 'meta', className: 'gt-meta' }, [
-        React.createElement('span', { key: 'rounds', className: 'gt-rounds', title: T.roundsTip },
+        phase !== 'complete' && React.createElement('span', { key: 'rounds', className: 'gt-rounds', title: T.roundsTip },
           T.round + ' ' + displayRounds + '/' + (unlimited ? T.unlimitedText : maxRounds)),
-        React.createElement('div', { key: 'track', className: 'gt-track' },
+        phase !== 'complete' && React.createElement('div', { key: 'track', className: 'gt-track' },
           React.createElement('div', { key: 'fill', className: 'gt-fill gt-fill-' + phase, style: { width: percent + '%' } })),
-        React.createElement('span', { key: 'pct', className: 'gt-percent' }, percent + '%'),
-        React.createElement('span', { key: 'elapsed', className: 'gt-elapsed' },
-          T.elapsed + ' ' + formatDuration(elapsedMs)),
+        phase !== 'complete' && React.createElement('span', { key: 'pct', className: 'gt-percent' }, percent + '%'),
+        React.createElement('span', { key: 'elapsed', className: 'gt-elapsed' }, formatDuration(elapsedMs)),
         React.createElement('span', { key: 'rev', className: 'gt-rev', title: T.revTip }, 'rev ' + revision),
       ])
 
@@ -552,12 +550,18 @@ return {
 
       const banners = []
       if (blocked) {
-        banners.push(React.createElement('div', { key: 'blocked', className: 'gt-banner gt-banner-blocked', role: 'alert' }, [
-          React.createElement('span', { key: 'code', className: 'gt-banner-code' },
-            T.blocked + (typeof blocked.code === 'string' ? ' · ' + blocked.code : '')),
-          React.createElement('span', { key: 'msg' },
-            (typeof blocked.message === 'string' ? blocked.message : '') + (exhausted ? ' — ' + T.exhaustedHint : '')),
-        ]))
+        let blockedText = null
+        if (exhausted) {
+          blockedText = (zh ? '轮次已跑满（' : 'Round budget exhausted (') + displayRounds + '/' + (unlimited ? T.unlimitedText : maxRounds) + (zh ? '），目标已自动受阻；提高上限可继续推进' : ') — the goal was auto-blocked. Raise the cap to continue')
+        } else if (typeof blocked.message === 'string' && blocked.message !== '') {
+          blockedText = blocked.message
+        }
+        if (blockedText !== null) {
+          banners.push(React.createElement('div', { key: 'blocked', className: 'gt-banner gt-banner-blocked', role: 'alert' }, [
+            React.createElement('span', { key: 'code', className: 'gt-banner-code' }, T.blocked),
+            React.createElement('span', { key: 'msg' }, blockedText),
+          ]))
+        }
       }
       if (actionError !== null) {
         banners.push(React.createElement('div', { key: 'err', className: 'gt-banner gt-banner-error', role: 'alert' }, actionError))
@@ -567,13 +571,17 @@ return {
       if (expanded) {
         const rows = [
           [T.goal, objective],
-          [T.round, displayRounds + ' / ' + (unlimited ? T.unlimitedText : maxRounds)],
-          [T.progress, percent + '%'],
-          [T.policy, modeLabel],
-          [T.created, formatClock(createdAt)],
-          [T.updated, formatClock(updatedAt) + ' (' + formatRelative(updatedAt, now) + ')'],
-          [T.revision, String(revision)],
         ]
+        if (phase === 'complete') {
+          rows.push([T.round, displayRounds + ' ' + (zh ? '轮' : 'rounds')])
+        } else {
+          rows.push([T.round, displayRounds + ' / ' + (unlimited ? T.unlimitedText : maxRounds)])
+        }
+        rows.push([T.progress, percent + '%'])
+        rows.push([T.policy, modeLabel])
+        rows.push([T.created, formatClock(createdAt)])
+        rows.push([T.updated, formatClock(updatedAt) + ' (' + formatRelative(updatedAt, now) + ')'])
+        rows.push([T.revision, String(revision)])
         if (activation !== null) rows.push([T.activation, activation === 'armed' ? T.activationArmed : T.activationDisarmed])
         if (phase === 'complete') rows.push([T.duration, formatDuration(updatedAt - createdAt)])
         const rowEls = rows.map((pair) => React.createElement('div', { key: pair[0], className: 'gt-row' },

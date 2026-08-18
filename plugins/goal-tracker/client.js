@@ -1,15 +1,15 @@
 // Browser half of @dsh-plugins/goal-tracker — client module format.
 //
 // Auto-generated twin of src/dynamic-client.js (verified live as gtrack-1
-// pkg-17). Loaded by the DSH web app through the exports["./client"] bundle
+// pkg-18). Loaded by the DSH web app through the exports["./client"] bundle
 // route and executed as a classic script.
 //
 // Features: control verbs via ctx.get("remote.goals"); completion-policy
 // modes embedded in the objective (agent / run-all-rounds / hybrid min+max /
 // true-unlimited); agent mode cap input; editor prefill; live round bridge
-// via host goal/live (dynamic only); round-limit UX (raise-cap button +
-// friendly banner, resume returns after the cap is raised); sheen sweep;
-// blocked banner; relative times.
+// via host goal/live (dynamic only); friendly blocked banner (no raw codes,
+// exhausted shows 轮次已跑满 (n/m)); completed goals hide x/n rounds and
+// progress; elapsed shows the bare value; sheen sweep; relative times.
 window.__ModuleLoader__.load({
   id: "@dsh-plugins/goal-tracker",
   factory: (require) => {
@@ -119,7 +119,6 @@ function apply(ctx){
       blocked: zh ? '受阻' : 'Blocked',
       complete: zh ? '已完成' : 'Completed',
       round: zh ? '轮次' : 'Round',
-      elapsed: zh ? '耗时' : 'elapsed',
       goal: zh ? '目标' : 'GOAL',
       created: zh ? '创建于' : 'Created',
       updated: zh ? '更新于' : 'Updated',
@@ -133,7 +132,7 @@ function apply(ctx){
       pause: zh ? '暂停' : 'Pause',
       resume: zh ? '恢复' : 'Resume',
       raiseCap: zh ? '提高上限' : 'Raise cap',
-      exhaustedHint: zh ? '轮次已耗尽，请先提高轮数上限（✎ 编辑或完成策略）后再恢复' : 'Round budget exhausted — raise the cap (✎ edit or policy) before resuming',
+      exhaustedFriendly: zh ? '轮次已跑满，目标已自动受阻；提高上限可继续推进' : 'Round budget exhausted — the goal was auto-blocked. Raise the cap to continue',
       completeBtn: zh ? '完成' : 'Complete',
       edit: zh ? '编辑' : 'Edit',
       clear: zh ? '清除' : 'Clear',
@@ -315,7 +314,7 @@ function apply(ctx){
             const raw = (err.message || '') + (err.code ? ' (' + err.code + ')' : '')
             // Friendly mapping for the exhausted-round resume rejection.
             if ((err.code === 'GOAL_INVALID_TRANSITION' || /exhausted/i.test(err.message || '')) && /maxGoalRounds|rounds/i.test(err.message || '')) {
-              setActionError(T.exhaustedHint)
+              setActionError(T.exhaustedFriendly)
             } else {
               setActionError(raw)
             }
@@ -506,13 +505,12 @@ function apply(ctx){
 
       // normal bar
       const meta = react.createElement('div', { key: 'meta', className: 'gt-meta' }, [
-        react.createElement('span', { key: 'rounds', className: 'gt-rounds', title: T.roundsTip },
+        phase !== 'complete' && react.createElement('span', { key: 'rounds', className: 'gt-rounds', title: T.roundsTip },
           T.round + ' ' + displayRounds + '/' + (unlimited ? T.unlimitedText : maxRounds)),
-        react.createElement('div', { key: 'track', className: 'gt-track' },
+        phase !== 'complete' && react.createElement('div', { key: 'track', className: 'gt-track' },
           react.createElement('div', { key: 'fill', className: 'gt-fill gt-fill-' + phase, style: { width: percent + '%' } })),
-        react.createElement('span', { key: 'pct', className: 'gt-percent' }, percent + '%'),
-        react.createElement('span', { key: 'elapsed', className: 'gt-elapsed' },
-          T.elapsed + ' ' + formatDuration(elapsedMs)),
+        phase !== 'complete' && react.createElement('span', { key: 'pct', className: 'gt-percent' }, percent + '%'),
+        react.createElement('span', { key: 'elapsed', className: 'gt-elapsed' }, formatDuration(elapsedMs)),
         react.createElement('span', { key: 'rev', className: 'gt-rev', title: T.revTip }, 'rev ' + revision),
       ])
 
@@ -558,12 +556,18 @@ function apply(ctx){
 
       const banners = []
       if (blocked) {
-        banners.push(react.createElement('div', { key: 'blocked', className: 'gt-banner gt-banner-blocked', role: 'alert' }, [
-          react.createElement('span', { key: 'code', className: 'gt-banner-code' },
-            T.blocked + (typeof blocked.code === 'string' ? ' · ' + blocked.code : '')),
-          react.createElement('span', { key: 'msg' },
-            (typeof blocked.message === 'string' ? blocked.message : '') + (exhausted ? ' — ' + T.exhaustedHint : '')),
-        ]))
+        let blockedText = null
+        if (exhausted) {
+          blockedText = (zh ? '轮次已跑满（' : 'Round budget exhausted (') + displayRounds + '/' + (unlimited ? T.unlimitedText : maxRounds) + (zh ? '），目标已自动受阻；提高上限可继续推进' : ') — the goal was auto-blocked. Raise the cap to continue')
+        } else if (typeof blocked.message === 'string' && blocked.message !== '') {
+          blockedText = blocked.message
+        }
+        if (blockedText !== null) {
+          banners.push(react.createElement('div', { key: 'blocked', className: 'gt-banner gt-banner-blocked', role: 'alert' }, [
+            react.createElement('span', { key: 'code', className: 'gt-banner-code' }, T.blocked),
+            react.createElement('span', { key: 'msg' }, blockedText),
+          ]))
+        }
       }
       if (actionError !== null) {
         banners.push(react.createElement('div', { key: 'err', className: 'gt-banner gt-banner-error', role: 'alert' }, actionError))
@@ -573,13 +577,17 @@ function apply(ctx){
       if (expanded) {
         const rows = [
           [T.goal, objective],
-          [T.round, displayRounds + ' / ' + (unlimited ? T.unlimitedText : maxRounds)],
-          [T.progress, percent + '%'],
-          [T.policy, modeLabel],
-          [T.created, formatClock(createdAt)],
-          [T.updated, formatClock(updatedAt) + ' (' + formatRelative(updatedAt, now) + ')'],
-          [T.revision, String(revision)],
         ]
+        if (phase === 'complete') {
+          rows.push([T.round, displayRounds + ' ' + (zh ? '轮' : 'rounds')])
+        } else {
+          rows.push([T.round, displayRounds + ' / ' + (unlimited ? T.unlimitedText : maxRounds)])
+        }
+        rows.push([T.progress, percent + '%'])
+        rows.push([T.policy, modeLabel])
+        rows.push([T.created, formatClock(createdAt)])
+        rows.push([T.updated, formatClock(updatedAt) + ' (' + formatRelative(updatedAt, now) + ')'])
+        rows.push([T.revision, String(revision)])
         if (activation !== null) rows.push([T.activation, activation === 'armed' ? T.activationArmed : T.activationDisarmed])
         if (phase === 'complete') rows.push([T.duration, formatDuration(updatedAt - createdAt)])
         const rowEls = rows.map((pair) => react.createElement('div', { key: pair[0], className: 'gt-row' },
