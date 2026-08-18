@@ -1,7 +1,7 @@
 // @dsh-plugins/goal-tracker — dynamic-plugin source for cordis_define.
 //
 // This file is the `code.client` body verified live in a DSH session
-// (pluginId gtrack-1, package pkg-11). It renders the enhanced OpenCode-style
+// (pluginId gtrack-1, package pkg-12). It renders the enhanced OpenCode-style
 // goal tracker as the installable client module (../client.js), but through
 // the dynamic-plugin toolset — no host composition change, no restart.
 //
@@ -34,12 +34,17 @@ const CSS = `
 .gt-bar-paused{border-left-color:var(--dsw-alias-state-warn-primary)}
 .gt-bar-blocked{border-left-color:var(--dsw-alias-state-error-primary)}
 .gt-bar-complete{border-left-color:var(--dsw-alias-state-success-primary)}
-@keyframes gt-pulse{0%,100%{opacity:1}50%{opacity:.45}}
-.gt-chip{flex:none;font-size:11px;font-weight:600;line-height:20px;padding:0 8px;border-radius:999px;letter-spacing:.02em}
-.gt-chip-active{color:var(--dsw-alias-state-success-primary);background:color-mix(in srgb, var(--dsw-alias-state-success-primary) 14%, transparent);animation:gt-pulse 1.6s ease-in-out infinite}
+@keyframes gt-sheen{0%{transform:translateX(-100%)}55%,100%{transform:translateX(100%)}}
+.gt-chip{flex:none;position:relative;overflow:hidden;font-size:11px;font-weight:600;line-height:20px;padding:0 8px;border-radius:999px;letter-spacing:.02em}
+.gt-chip-active{color:var(--dsw-alias-state-success-primary);background:color-mix(in srgb, var(--dsw-alias-state-success-primary) 14%, transparent)}
 .gt-chip-paused{color:var(--dsw-alias-state-warn-primary);background:color-mix(in srgb, var(--dsw-alias-state-warn-primary) 14%, transparent)}
-.gt-chip-blocked{color:var(--dsw-alias-state-error-primary);background:color-mix(in srgb, var(--dsw-alias-state-error-primary) 14%, transparent);animation:gt-pulse 1.1s ease-in-out infinite}
+.gt-chip-blocked{color:var(--dsw-alias-state-error-primary);background:color-mix(in srgb, var(--dsw-alias-state-error-primary) 14%, transparent)}
 .gt-chip-complete{color:var(--dsw-alias-state-success-primary);background:color-mix(in srgb, var(--dsw-alias-state-success-primary) 14%, transparent)}
+@media (prefers-reduced-motion: no-preference){
+  .gt-chip-active::after,.gt-chip-blocked::after,.gt-fill-active::after{content:"";position:absolute;inset:0;background:linear-gradient(105deg,transparent 42%,rgba(255,255,255,.38) 50%,transparent 58%);transform:translateX(-100%);animation:gt-sheen 3.2s ease-in-out infinite;pointer-events:none}
+  .gt-chip-blocked::after{animation-duration:3.9s}
+  .gt-fill-active::after{animation-duration:4.4s}
+}
 .gt-policy-chip{flex:none;font-size:10px;line-height:18px;padding:0 6px;border-radius:6px;color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l1);white-space:nowrap;font-variant-numeric:tabular-nums}
 .gt-objective{flex:1;min-width:0;font-size:13px;line-height:20px;color:var(--dsw-alias-label-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .gt-meta{flex:none;display:flex;align-items:center;gap:8px}
@@ -47,7 +52,7 @@ const CSS = `
 .gt-percent{font-size:11px;color:var(--dsw-alias-label-tertiary);font-variant-numeric:tabular-nums;white-space:nowrap;min-width:30px;text-align:right}
 .gt-track{width:64px;height:5px;border-radius:3px;background:var(--dsw-alias-border-l1);overflow:hidden}
 .gt-fill{height:100%;border-radius:3px;transition:width .3s ease}
-.gt-fill-active{background:linear-gradient(90deg, var(--dsw-alias-state-success-primary), color-mix(in srgb, var(--dsw-alias-state-success-primary) 55%, var(--dsw-alias-brand-primary)))}
+.gt-fill-active{position:relative;overflow:hidden;background:linear-gradient(90deg, var(--dsw-alias-state-success-primary), color-mix(in srgb, var(--dsw-alias-state-success-primary) 55%, var(--dsw-alias-brand-primary)))}
 .gt-fill-paused{background:var(--dsw-alias-state-warn-primary)}
 .gt-fill-blocked{background:var(--dsw-alias-state-error-primary)}
 .gt-fill-complete{background:var(--dsw-alias-state-success-primary)}
