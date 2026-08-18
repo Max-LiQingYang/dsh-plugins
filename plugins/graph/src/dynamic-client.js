@@ -65,7 +65,6 @@ const CSS = `\
 .gvw-graphrow-name{font-weight:600;font-size:12px}
 .gvw-graphview{border:1px solid var(--dsw-alias-border-l1);border-radius:8px;background:var(--dsw-alias-bg-layer-1);padding:10px 12px;display:flex;flex-direction:column;gap:8px}
 .gvw-toolbar{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-.gvw-graphview{border:1px solid var(--dsw-alias-border-l1);border-radius:8px;background:var(--dsw-alias-bg-layer-1);padding:10px 12px;display:flex;flex-direction:column;gap:8px}
 .gvw-btn:hover{color:var(--dsw-alias-label-primary);border-color:var(--dsw-alias-label-secondary)}
 .gvw-btn-primary{background:var(--dsw-alias-brand-primary);color:var(--dsw-alias-label-on-brand);border-color:var(--dsw-alias-brand-primary)}
 .gvw-btn-primary:hover{filter:brightness(1.1)}

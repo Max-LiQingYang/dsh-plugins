@@ -135,8 +135,12 @@ generic JSON row:
   viewer. Click a row to enter the graph: static topology render with
   per-node info on click, and an "open agent session" deep link
   (`sessions.openSubagent`) for live runs that own a child session.
-  Editor interactivity (drag, connect, create, persist edits) is on the
-  roadmap — the viewer stays read-only this round.
+- **Interactive editor** — saved graphs are editable from the tab:
+  drag nodes, drag-to-connect from port to port, add / delete nodes and
+  edges with the toolbar or the Delete key, toggle an edge between static
+  (target dropdown) and router (JS code textarea), save back via
+  `graphLibrary.update`. Live runs stay read-only. Pure graph edits
+  (`lib/editor.js`) are decoupled from React for headless testing.
 - Dry-run calls render their validation issues and cycle report; failed calls
   render the error text.
 
@@ -153,6 +157,7 @@ node test/engine.test.mjs        # 24 assertions: cycles, routing, fan-out, maxS
 node test/client.test.mjs        # 27 assertions: card helpers (parse/layout/fold/outputs/live-pick)
 node test/dynamic-host.test.mjs  # 10 assertions: live aggregator fold (events → graph.live snapshot)
 node test/library.test.mjs       # 23 assertions: FS library save/list/get/remove/atomicity/dedup/update
+node test/editor.test.mjs        # 26 assertions: pure graph-edit operations (addNode / addEdge / ...)
 ```
 
 ## Trust
