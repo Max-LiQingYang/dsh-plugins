@@ -1,11 +1,9 @@
 // @dsh-plugins/goal-tracker — dynamic-plugin source for cordis_define.
 //
 // This file is the `code.client` body verified live in a DSH session
-// (pluginId gtrack-1, package pkg-7; this copy merges two equivalent
-// phase-condition lines and drops an unused translation key). It renders the
-// enhanced OpenCode-style goal tracker as the installable client module
-// (../client.js), but through the dynamic-plugin toolset — no host
-// composition change, no restart.
+// (pluginId gtrack-1, package pkg-5). It renders the enhanced OpenCode-style
+// goal tracker as the installable client module (../client.js), but through
+// the dynamic-plugin toolset — no host composition change, no restart.
 //
 // Usage: paste everything below into the `code.client` field of a
 // cordis_define call (plugin.kind: "new", idPrefix: e.g. "gtrack"), then
@@ -15,17 +13,17 @@
 //
 // Features:
 // - Control verbs through the product remote service `ctx.get('remote.goals')`
-//   (optional — the tracker degrades to read-only when absent): pause /
-//   resume / complete / clear, inline edit of objective + max rounds, and a
-//   "new goal" entry when no goal exists.
-// - Status: phase badge, round stepper, percent, progress bar, live elapsed
-//   time, revision chip, always-visible blocked banner, relative update time.
-// - OpenCode-style visuals: phase accent border, circular badge, hover
-//   layers, gradient progress, focus ring.
+//   (optional — degrades to read-only when absent): pause / resume / complete /
+//   clear, inline edit of objective + rounds, "new goal" entry.
+// - Completion policy modes, written into the objective as an agent-readable
+//   block and enforced via maxGoalRounds: agent-decides (default) / run-all-
+//   rounds / agent + min-max rounds (hybrid) / unlimited (sentinel 999999).
+// - Rounds default 16 in the create form; "unlimited rounds" toggle.
+// - Status: phase badge, rounds, percent, progress bar, live elapsed time,
+//   revision chip, always-visible blocked banner, relative update time.
 //
 // Requires: DSH >= 0.1.0-rc.7 with the goal service mounted (dsh-base), the
-// web app's `conversation.input.dock` slot, and dsh-api-remotes for the
-// control verbs.
+// web app's `conversation.input.dock` slot, and dsh-api-remotes for verbs.
 
 const CSS = `
 .gt-dock{box-sizing:border-box;width:calc(100% - var(--dsh-composer-side-clearance) - var(--dsh-composer-side-clearance) - var(--dsh-composer-dock-inset) - var(--dsh-composer-dock-inset));margin:0 auto}
@@ -79,6 +77,12 @@ const CSS = `
 .gt-row-k{color:var(--dsw-alias-label-secondary)}
 .gt-row-v{min-width:0;color:var(--dsw-alias-label-primary);overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
 .gt-blocked{border-top:1px solid var(--dsw-alias-border-l1);padding-top:6px;display:grid;grid-template-columns:92px 1fr;gap:2px 10px;font-size:12px;line-height:18px}
+.gt-policy{border-top:1px solid var(--dsw-alias-border-l1);padding-top:6px;display:flex;flex-direction:column;gap:6px;font-size:12px}
+.gt-policy-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.gt-select{height:26px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);border-radius:7px;outline:none;padding:0 6px;font-size:12px}
+.gt-check{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--dsw-alias-label-secondary);cursor:pointer}
+.gt-check input{accent-color:var(--dsw-alias-state-business-primary)}
+.gt-policy-hint{font-size:11px;color:var(--dsw-alias-label-caption)}
 `
 
 return {
@@ -87,12 +91,8 @@ return {
     if (slots === undefined) return
 
     const timer = ctx.get('timer')
-    // Product service: goal mutation verbs exposed to the browser by the
-    // api gateway (edit/pause/resume/complete/clear/create). Optional — the
-    // tracker degrades to read-only when absent.
     const remoteGoals = ctx.get('remote.goals')
 
-    // Best-effort locale probe (zh vs en).
     let zh = true
     const locale = ctx.get('locale')
     if (locale) {
@@ -103,6 +103,8 @@ return {
         if (snap && typeof snap.id === 'string') zh = snap.id.indexOf('zh') === 0
       } catch (e) { /* best effort */ }
     }
+
+    const UNLIMITED = 999999
 
     const T = {
       running: zh ? '进行中' : 'Running',
@@ -127,14 +129,25 @@ return {
       cancel: zh ? '取消' : 'Cancel',
       newGoal: zh ? '＋ 新建目标' : '+ New goal',
       objectivePh: zh ? '目标内容…' : 'Goal objective…',
-      roundsPh: zh ? '轮次上限' : 'Max rounds',
+      roundsPh: zh ? '轮数上限' : 'Max rounds',
       justNow: zh ? '刚刚' : 'just now',
       minAgo: zh ? '分钟前' : 'min ago',
       hrAgo: zh ? '小时前' : 'h ago',
       daysAgo: zh ? '天前' : 'd ago',
       create: zh ? '创建' : 'Create',
-      revTip: zh ? '修订号：每次持久化变更 +1（创建/编辑/暂停/恢复/完成/阻断/清除）' : 'Revision: +1 per durable mutation (create/edit/pause/resume/complete/block/clear)',
-      roundsTip: zh ? '已准入的自主推进轮数（blocked 期间不增长，与修订号相互独立）' : 'Admitted continuation rounds (independent of the revision; does not grow while blocked)',
+      revTip: zh ? '目标修订号：每次修改 +1' : 'Goal revision: +1 per update',
+      roundsTip: zh ? '已执行轮数 / 轮数上限' : 'Rounds run / cap',
+      policy: zh ? '完成策略' : 'Completion policy',
+      modeAgent: zh ? '由 agent 决定是否完成' : 'Agent decides',
+      modeRounds: zh ? '必须执行完指定轮次' : 'Run all rounds',
+      modeHybrid: zh ? 'agent 决定 + 最少/最多轮数' : 'Agent + min/max rounds',
+      modeUnlimited: zh ? '无限执行，由 agent 决定' : 'Unlimited',
+      minLabel: zh ? '最少轮数' : 'Min rounds',
+      maxLabel: zh ? '最多轮数' : 'Max rounds',
+      applyPolicy: zh ? '应用策略' : 'Apply',
+      unlimitedToggle: zh ? '无限轮次' : 'Unlimited rounds',
+      unlimitedText: zh ? '无限' : '∞',
+      policyHint: zh ? '策略会写入目标文本，agent 每轮都会看到并遵守' : 'The policy is written into the objective so the agent sees it every round',
     }
 
     function formatDuration(ms) {
@@ -167,9 +180,47 @@ return {
       return Math.floor(h / 24) + ' ' + T.daysAgo
     }
 
+    function num(v) {
+      const n = parseInt(String(v), 10)
+      return Number.isFinite(n) && n > 0 ? n : 0
+    }
+
+    // Completion-policy block embedded in the objective (agent-readable).
+    // Uses full-width brackets ［］ in stored text; parsing accepts both.
+    const POLICY_RE = /[\[［]完成策略：[^\]］]*[\]］]/g
+
+    function buildPolicy(mode, min, max) {
+      if (mode === 'rounds') return '［完成策略：必须执行完 ' + (max > 0 ? max : 16) + ' 轮后才可完成］'
+      if (mode === 'hybrid') {
+        const parts = []
+        if (min > 0) parts.push('最少 ' + min + ' 轮')
+        if (max > 0) parts.push('最多 ' + max + ' 轮')
+        if (parts.length === 0) return ''
+        return '［完成策略：agent 决定完成时机，但' + parts.join('、') + '］'
+      }
+      if (mode === 'unlimited') return '［完成策略：无限执行，由 agent 决定完成时机］'
+      return ''
+    }
+
+    function parsePolicy(objective) {
+      const blocks = objective.match(POLICY_RE) || []
+      const clean = objective.replace(POLICY_RE, '').replace(/\n{3,}/g, '\n\n').trim()
+      const block = blocks.length > 0 ? blocks[blocks.length - 1] : ''
+      if (block.indexOf('必须执行完') >= 0) {
+        const m = block.match(/\d+/)
+        return { mode: 'rounds', min: 0, max: m ? num(m[0]) : 16, clean: clean }
+      }
+      if (block.indexOf('无限') >= 0) return { mode: 'unlimited', min: 0, max: 0, clean: clean }
+      if (block.indexOf('最少') >= 0 || block.indexOf('最多') >= 0) {
+        const mi = block.match(/最少 (\d+)/)
+        const ma = block.match(/最多 (\d+)/)
+        return { mode: 'hybrid', min: mi ? num(mi[1]) : 0, max: ma ? num(ma[1]) : 0, clean: clean }
+      }
+      return { mode: 'agent', min: 0, max: 0, clean: clean }
+    }
+
     function GoalTracker(props) {
       const sessionId = props.sessionId
-      // Unconditional hooks first (React rules).
       const projection = typeof props.useProjection === 'function' ? props.useProjection('goal') : null
       const [now, setNow] = React.useState(() => (typeof Date !== 'undefined' ? Date.now() : 0))
       const [expanded, setExpanded] = React.useState(false)
@@ -178,10 +229,15 @@ return {
       const [roundsDraft, setRoundsDraft] = React.useState('')
       const [creating, setCreating] = React.useState(false)
       const [createDraft, setCreateDraft] = React.useState('')
-      const [createRounds, setCreateRounds] = React.useState('')
+      const [createRounds, setCreateRounds] = React.useState('16')
+      const [createUnlimited, setCreateUnlimited] = React.useState(false)
+      const [modeDraft, setModeDraft] = React.useState('agent')
+      const [minDraft, setMinDraft] = React.useState('')
+      const [maxDraft, setMaxDraft] = React.useState('')
       const [pending, setPending] = React.useState(false)
       const [actionError, setActionError] = React.useState(null)
       const pendingRef = React.useRef(false)
+      const lastApplyAt = React.useRef(0)
 
       React.useEffect(() => {
         if (!timer) return undefined
@@ -215,7 +271,7 @@ return {
         }
       }
 
-      // ── no goal: offer create when the remote service allows it ────────────
+      // ── no goal: create entry ─────────────────────────────────────────────
       if (!goal) {
         if (!canRemote || typeof remoteGoals.create !== 'function') return null
         if (!creating) {
@@ -228,14 +284,20 @@ return {
         const doCreate = () => {
           const objective = createDraft.trim()
           if (!objective) return
-          const request = { objective }
-          const n = parseInt(createRounds, 10)
-          if (Number.isFinite(n) && n > 0) request.maxGoalRounds = n
+          const request = { objective: objective }
+          if (createUnlimited) {
+            request.maxGoalRounds = UNLIMITED
+            request.objective = objective + '\n\n' + buildPolicy('unlimited', 0, 0)
+          } else {
+            const n = num(createRounds)
+            request.maxGoalRounds = n > 0 ? n : 16
+          }
           runAction(() => remoteGoals.create(sessionId, request)).then((result) => {
             if (result && result.ok === false) return
             setCreating(false)
             setCreateDraft('')
-            setCreateRounds('')
+            setCreateRounds('16')
+            setCreateUnlimited(false)
           })
         }
         return React.createElement('div', { className: 'gt-dock' }, [
@@ -250,11 +312,18 @@ return {
             }),
             React.createElement('input', {
               key: 'rounds', className: 'gt-input gt-input-num', type: 'number', min: '1',
-              placeholder: T.roundsPh, value: createRounds,
-              disabled: pending,
+              title: T.roundsTip, placeholder: '16', value: createUnlimited ? '' : createRounds,
+              disabled: pending || createUnlimited,
               onChange: (e) => setCreateRounds(e.target.value),
               onKeyDown: (e) => { if (e.key === 'Enter') doCreate() },
             }),
+            React.createElement('label', { key: 'unl', className: 'gt-check' },
+              React.createElement('input', {
+                type: 'checkbox', checked: createUnlimited,
+                disabled: pending,
+                onChange: (e) => setCreateUnlimited(e.target.checked),
+              }),
+              T.unlimitedToggle),
             React.createElement('button', {
               key: 'create', type: 'button', className: 'gt-icon-btn',
               title: T.create, 'aria-label': T.create,
@@ -265,7 +334,7 @@ return {
               key: 'cancel', type: 'button', className: 'gt-icon-btn',
               title: T.cancel, 'aria-label': T.cancel,
               disabled: pending,
-              onClick: () => { setCreating(false); setCreateDraft(''); setCreateRounds('') },
+              onClick: () => { setCreating(false); setCreateDraft(''); setCreateRounds('16'); setCreateUnlimited(false) },
             }, '×'),
           ]),
           actionError !== null && React.createElement('div', { key: 'err', className: 'gt-banner gt-banner-error', role: 'alert' }, actionError),
@@ -273,18 +342,21 @@ return {
       }
 
       // ── goal exists ────────────────────────────────────────────────────────
-      const objective = typeof goal.objective === 'string' ? goal.objective : ''
+      const rawObjective = typeof goal.objective === 'string' ? goal.objective : ''
+      const policy = parsePolicy(rawObjective)
+      const objective = policy.clean
       const phase = (goal.phase === 'active' || goal.phase === 'paused' || goal.phase === 'blocked' || goal.phase === 'complete')
         ? goal.phase
         : 'active'
       const maxRounds = typeof goal.maxGoalRounds === 'number' && goal.maxGoalRounds > 0 ? goal.maxGoalRounds : 1
+      const unlimited = maxRounds >= UNLIMITED
       const rounds = typeof projection.roundsStarted === 'number' ? projection.roundsStarted : 0
       const createdAt = typeof projection.createdAt === 'number' ? projection.createdAt : 0
       const updatedAt = typeof projection.updatedAt === 'number' ? projection.updatedAt : 0
       const revision = typeof goal.revision === 'number' ? goal.revision : 0
       const blocked = goal.blockedReason && typeof goal.blockedReason === 'object' ? goal.blockedReason : null
 
-      const percent = Math.min(100, Math.round((rounds / maxRounds) * 100))
+      const percent = unlimited ? Math.min(100, Math.round((rounds / 9999) * 100)) : Math.min(100, Math.round((rounds / maxRounds) * 100))
       const elapsedMs = phase === 'complete' ? (updatedAt - createdAt) : (now - createdAt)
       const phaseLabel = phase === 'active' ? T.running : phase === 'paused' ? T.paused : phase === 'blocked' ? T.blocked : T.complete
       const glyph = phase === 'active' ? '●' : phase === 'paused' ? '⏸' : phase === 'blocked' ? '⚠' : '✓'
@@ -297,8 +369,8 @@ return {
         clear: typeof remoteGoals.clear === 'function' ? () => remoteGoals.clear(sessionId, refOf) : null,
         edit: typeof remoteGoals.edit === 'function' ? (obj, maxR) => {
           const req = { objective: obj }
-          const n = parseInt(maxR, 10)
-          if (Number.isFinite(n) && n > 0) req.maxGoalRounds = n
+          const n = num(maxR)
+          if (n > 0) req.maxGoalRounds = n
           return remoteGoals.edit(sessionId, refOf, req)
         } : null,
       } : null
@@ -311,12 +383,20 @@ return {
         onClick: (e) => { stop(e); onClick() },
       }, glyphText)
 
+      const modeLabel = policy.mode === 'rounds'
+        ? T.modeRounds + '（' + (policy.max > 0 ? policy.max : maxRounds) + '）'
+        : policy.mode === 'hybrid'
+          ? T.modeHybrid + (policy.min > 0 ? '（最少 ' + policy.min + '）' : '') + (policy.max > 0 ? '（最多 ' + policy.max + '）' : '')
+          : policy.mode === 'unlimited' ? T.modeUnlimited : T.modeAgent
+
       // edit mode: inline form replacing the bar
       if (editing) {
         const saveEdit = () => {
           const trimmed = draft.trim()
           if (!trimmed) return
-          runAction(() => verbs.edit(trimmed, roundsDraft)).then((result) => {
+          const block = buildPolicy(policy.mode, policy.min, policy.max)
+          const nextObjective = trimmed + (block ? '\n\n' + block : '')
+          runAction(() => verbs.edit(nextObjective, roundsDraft)).then((result) => {
             if (result && result.ok === false) return
             setEditing(false)
             setDraft('')
@@ -334,7 +414,8 @@ return {
           }),
           React.createElement('input', {
             key: 'rounds', className: 'gt-input gt-input-num', type: 'number', min: '1',
-            placeholder: String(maxRounds), value: roundsDraft,
+            title: T.roundsTip, placeholder: unlimited ? T.unlimitedText : String(maxRounds),
+            value: unlimited && roundsDraft === '' ? '' : roundsDraft,
             disabled: pending,
             onChange: (e) => setRoundsDraft(e.target.value),
             onKeyDown: (e) => { if (e.key === 'Enter') saveEdit() },
@@ -351,7 +432,7 @@ return {
       // normal bar
       const meta = React.createElement('div', { key: 'meta', className: 'gt-meta' }, [
         React.createElement('span', { key: 'rounds', className: 'gt-rounds', title: T.roundsTip },
-          T.round + ' ' + rounds + '/' + maxRounds),
+          T.round + ' ' + rounds + '/' + (unlimited ? T.unlimitedText : maxRounds)),
         React.createElement('div', { key: 'track', className: 'gt-track' },
           React.createElement('div', { key: 'fill', className: 'gt-fill gt-fill-' + phase, style: { width: percent + '%' } })),
         React.createElement('span', { key: 'pct', className: 'gt-percent' }, percent + '%'),
@@ -365,7 +446,7 @@ return {
         if (phase === 'active' && verbs.pause) controls.push(iconBtn('pause', T.pause, '⏸', () => runAction(verbs.pause)))
         if ((phase === 'paused' || phase === 'blocked') && verbs.resume) controls.push(iconBtn('resume', T.resume, '▶', () => runAction(verbs.resume)))
         if (phase === 'active' && verbs.complete) controls.push(iconBtn('complete', T.completeBtn, '✓', () => runAction(verbs.complete)))
-        if (verbs.edit) controls.push(iconBtn('edit', T.edit, '✎', () => { setDraft(objective); setRoundsDraft(String(maxRounds)); setEditing(true) }))
+        if (verbs.edit) controls.push(iconBtn('edit', T.edit, '✎', () => { setDraft(objective); setRoundsDraft(''); setEditing(true) }))
         if (verbs.clear) controls.push(iconBtn('clear', T.clear, '×', () => runAction(verbs.clear)))
       }
       controls.push(React.createElement('span', {
@@ -410,8 +491,9 @@ return {
       if (expanded) {
         const rows = [
           [T.goal, objective],
-          [T.round, rounds + ' / ' + maxRounds],
+          [T.round, rounds + ' / ' + (unlimited ? T.unlimitedText : maxRounds)],
           [T.progress, percent + '%'],
+          [T.policy, modeLabel],
           [T.created, formatClock(createdAt)],
           [T.updated, formatClock(updatedAt) + ' (' + formatRelative(updatedAt, now) + ')'],
           [T.revision, String(revision)],
@@ -427,6 +509,65 @@ return {
               T.reason + (typeof blocked.code === 'string' ? ' · ' + blocked.code : '')),
             React.createElement('span', { className: 'gt-row-v' },
               typeof blocked.message === 'string' ? blocked.message : '')))
+        }
+        // completion-policy editor
+        if (verbs && verbs.edit) {
+          const applyPolicy = () => {
+            // Debounce: ignore re-entrant applies within 800ms (a duplicated
+            // click must not run the mutation twice with reset state).
+            const t = typeof Date !== 'undefined' ? Date.now() : 0
+            if (t - lastApplyAt.current < 800) return
+            lastApplyAt.current = t
+            const mMode = modeDraft
+            const mMin = num(minDraft)
+            const mMax = num(maxDraft)
+            let nextMax = maxRounds
+            if (mMode === 'rounds') nextMax = mMax > 0 ? mMax : 16
+            else if (mMode === 'hybrid') nextMax = mMax > 0 ? mMax : maxRounds
+            else if (mMode === 'unlimited') nextMax = UNLIMITED
+            const block = buildPolicy(mMode, mMin, mMax)
+            const nextObjective = objective + (block ? '\n\n' + block : '')
+            runAction(() => verbs.edit(nextObjective, String(nextMax))).then((result) => {
+              if (result && result.ok === false) return
+              // Keep the editor state as applied (no reset race); close panel.
+              setExpanded(false)
+            })
+          }
+          const policyChildren = [
+            React.createElement('div', { key: 'row1', className: 'gt-policy-row' }, [
+              React.createElement('span', { key: 'lbl', className: 'gt-row-k' }, T.policy),
+              React.createElement('select', {
+                key: 'mode', className: 'gt-select', value: modeDraft,
+                disabled: pending,
+                onChange: (e) => setModeDraft(e.target.value),
+              }, [
+                React.createElement('option', { key: 'agent', value: 'agent' }, T.modeAgent),
+                React.createElement('option', { key: 'rounds', value: 'rounds' }, T.modeRounds),
+                React.createElement('option', { key: 'hybrid', value: 'hybrid' }, T.modeHybrid),
+                React.createElement('option', { key: 'unlimited', value: 'unlimited' }, T.modeUnlimited),
+              ]),
+              (modeDraft === 'rounds' || modeDraft === 'hybrid') && React.createElement('input', {
+                key: 'max', className: 'gt-input gt-input-num', type: 'number', min: '1',
+                title: T.maxLabel, placeholder: T.maxLabel, value: maxDraft,
+                disabled: pending,
+                onChange: (e) => setMaxDraft(e.target.value),
+              }),
+              modeDraft === 'hybrid' && React.createElement('input', {
+                key: 'min', className: 'gt-input gt-input-num', type: 'number', min: '1',
+                title: T.minLabel, placeholder: T.minLabel, value: minDraft,
+                disabled: pending,
+                onChange: (e) => setMinDraft(e.target.value),
+              }),
+              React.createElement('button', {
+                key: 'apply', type: 'button', className: 'gt-icon-btn',
+                title: T.applyPolicy, 'aria-label': T.applyPolicy,
+                disabled: pending,
+                onClick: (e) => { stop(e); applyPolicy() },
+              }, '✓'),
+            ]),
+            React.createElement('div', { key: 'hint', className: 'gt-policy-hint' }, T.policyHint),
+          ]
+          detailChildren.push(React.createElement('div', { key: 'policy', className: 'gt-policy' }, policyChildren))
         }
         detail = React.createElement('div', { key: 'detail', className: 'gt-detail' }, detailChildren)
       }

@@ -166,6 +166,10 @@ export function apply(ctx, config) {
     parameters: PARAMETERS,
     output: {
       schema: OUTPUT_SCHEMA,
+      // Pure projection riding the tool/result event as `meta`, so the web
+      // tool card (client.js, key "graph") renders the structured outcome —
+      // trace, state, endReason — instead of parsing render() text.
+      presentationMeta: (_args, value) => value,
       render: (_args, value) => {
         const name = _args?.name ?? 'graph'
         const parts = [`${name}: ${value.endReason} after ${value.steps} step(s)`]

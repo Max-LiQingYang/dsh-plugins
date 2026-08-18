@@ -1,21 +1,20 @@
 // @dsh-plugins/workflow-visualizer — dynamic-plugin HOST source for cordis_define.
 //
-// This file is the exact `code.host` body verified live in a DSH session
-// (pluginId wfviz-2, package pkg-4, run-4: completed). It aggregates the
-// in-memory `workflow/*` Cordis events (start/phase/log/agent-start/
-// agent-end/end) plus `agent/status` into plain owned data, and serves a
-// `workflows.state` snapshot to the browser half through the dynamic
-// plugin's package-private RPC.
+// This file is the exact `code.host` body of the v2 visualizer, verified
+// live as wfviz-2/pkg-6 (run-8: completed). It aggregates the in-memory
+// `workflow/*` Cordis events (start/phase/log/agent-start/agent-end/end)
+// plus `agent/status` into plain owned data, and serves a `workflows.state`
+// snapshot to the browser half through the dynamic plugin's package-private
+// RPC.
+//
+// v2 additions: per-phase first-seen timestamps (`phases[].firstAt`), live
+// idle/running refinement per agent (`agents[].live`), and the run-wide
+// `lastEventAt` liveness stamp.
 //
 // Usage: paste everything below into the `code.host` field of a
 // cordis_define call (plugin.kind: "new", idPrefix: e.g. "wfviz"), pairing
 // it with src/dynamic-client.js as `code.client`. Then cordis_run the
 // returned pluginId/packageId and authorize the client half.
-//
-// Compared with the installable client module (../client.js), the dynamic
-// host half additionally captures what the durable session events do not
-// carry: elapsed/duration timestamps per run and per agent, and the
-// script's `log()` narration lines.
 
 return {
   apply(ctx) {
@@ -36,12 +35,14 @@ return {
           return p !== null && typeof p === 'object' && typeof p.title === 'string' ? p.title : String(p)
         }),
         phasesSeen: [],
+        phaseFirstAt: {},
         agents: [],
         logs: [],
         startedAt: Date.now(),
         endedAt: null,
         stopReason: null,
         error: null,
+        lastEventAt: null,
       }
       runs.set(info.id, r)
       if (runs.size > MAX_RUNS) {
@@ -55,17 +56,26 @@ return {
       return r
     }
 
+    function notePhase(r, title) {
+      if (r.phasesSeen.indexOf(title) === -1) {
+        r.phasesSeen.push(title)
+        r.phaseFirstAt[title] = Date.now()
+      }
+    }
+
     ctx.on('workflow/start', function (info) { record(info) })
 
     ctx.on('workflow/phase', function (info, title) {
       var r = record(info)
       if (r === null || typeof title !== 'string') return
-      if (r.phasesSeen.indexOf(title) === -1) r.phasesSeen.push(title)
+      r.lastEventAt = Date.now()
+      notePhase(r, title)
     })
 
     ctx.on('workflow/log', function (info, message) {
       var r = record(info)
       if (r === null) return
+      r.lastEventAt = Date.now()
       r.logs.push({ ts: Date.now(), message: typeof message === 'string' ? message : String(message) })
       if (r.logs.length > 200) r.logs.splice(0, r.logs.length - 200)
     })
@@ -73,16 +83,18 @@ return {
     ctx.on('workflow/agent-start', function (info, agent) {
       var r = record(info)
       if (r === null || agent === null || typeof agent !== 'object') return
+      r.lastEventAt = Date.now()
       var phase = typeof agent.phase === 'string' && agent.phase !== ''
         ? agent.phase
         : (r.phasesSeen.length > 0 ? r.phasesSeen[r.phasesSeen.length - 1] : null)
-      if (phase !== null && r.phasesSeen.indexOf(phase) === -1) r.phasesSeen.push(phase)
+      if (phase !== null) notePhase(r, phase)
       r.agents.push({
         seq: typeof agent.seq === 'number' ? agent.seq : r.agents.length + 1,
         label: typeof agent.label === 'string' ? agent.label : 'agent',
         phase: phase,
         childId: typeof agent.childId === 'string' ? agent.childId : null,
         outcome: null,
+        live: null,
         startedAt: Date.now(),
         endedAt: null,
       })
@@ -91,11 +103,13 @@ return {
     ctx.on('workflow/agent-end', function (info, agent) {
       var r = record(info)
       if (r === null || agent === null || typeof agent !== 'object') return
+      r.lastEventAt = Date.now()
       for (var i = r.agents.length - 1; i >= 0; i--) {
         var a = r.agents[i]
         if (a.outcome === null && (a.seq === agent.seq || (a.childId !== null && a.childId === agent.childId))) {
           a.outcome = agent.outcome === 'completed' || agent.outcome === 'failed' || agent.outcome === 'cancelled' ? agent.outcome : 'completed'
           a.endedAt = Date.now()
+          a.live = null
           break
         }
       }
@@ -105,6 +119,7 @@ return {
       var r = record(info)
       if (r === null) return
       r.endedAt = Date.now()
+      r.lastEventAt = r.endedAt
       r.stopReason = result !== null && typeof result === 'object' && typeof result.stopReason === 'string' ? result.stopReason : 'completed'
       r.error = result !== null && typeof result === 'object' && typeof result.error === 'string' ? result.error : null
       for (var i = 0; i < r.agents.length; i++) {
@@ -141,7 +156,7 @@ return {
         function slot(title) {
           var p = phaseMap[title]
           if (p === undefined) {
-            p = { title: title, total: 0, completed: 0, failed: 0, cancelled: 0, running: 0 }
+            p = { title: title, total: 0, completed: 0, failed: 0, cancelled: 0, running: 0, firstAt: r.phaseFirstAt[title] || null }
             phaseMap[title] = p
             phases.push(p)
           }
@@ -159,7 +174,9 @@ return {
             seq: a.seq,
             label: a.label,
             phase: a.phase,
+            childId: a.childId,
             outcome: a.outcome,
+            live: a.live,
             startedAt: a.startedAt,
             endedAt: a.endedAt,
           }
@@ -172,6 +189,7 @@ return {
           endedAt: r.endedAt,
           stopReason: r.stopReason,
           error: r.error,
+          lastEventAt: r.lastEventAt,
           agentCounts: counts,
           phases: phases,
           agents: agents,
