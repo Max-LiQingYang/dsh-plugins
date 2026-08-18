@@ -12,9 +12,13 @@ DSH 插件——它们以「客户端模块」的形式安装到 `dsh web` profi
 dsh-plugins/
 ├── plugins/
 │   ├── goal-tracker/          # OpenCode 风格 Goal 追踪器（见 plugins/goal-tracker/README.md）
-│   └── workflow-visualizer/   # Claude 风格 workflow 运行可视化（见 plugins/workflow-visualizer/README.md）
+│   ├── workflow-visualizer/   # Claude 风格 workflow 运行可视化（见 plugins/workflow-visualizer/README.md）
+│   └── graph/                 # LangGraph 风格 graph 图工作模式：模型工具 `graph`（见 plugins/graph/README.md）
 └── package.json               # pnpm workspace 根（workspaces: plugins/*）
 ```
+
+> 前两个是客户端（浏览器 UI）插件；`graph` 是**宿主平面工具插件**——注册模型可调用的
+> `graph` 工具，把节点编排为真实子代理。安装方式见其 README 的 "Install"。
 
 ## 安装一个插件（以 goal-tracker 为例）
 
