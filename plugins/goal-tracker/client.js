@@ -1,16 +1,16 @@
 // Browser half of @dsh-plugins/goal-tracker — client module format.
 //
 // Auto-generated twin of src/dynamic-client.js (verified live as gtrack-1
-// pkg-12). Loaded by the DSH web app through the exports["./client"] bundle
+// pkg-14). Loaded by the DSH web app through the exports["./client"] bundle
 // route and executed as a classic script.
 //
 // Features: control verbs via ctx.get("remote.goals"); completion-policy
 // modes embedded in the objective (agent / run-all-rounds / hybrid min+max /
 // true-unlimited — never self-completes, no complete button); agent mode
 // exposes an adjustable round cap; editor prefills the current mode; default
-// 16 rounds with an unlimited toggle; elegant sheen sweep (no breathing
-// pulse) on status chips and the progress fill, gated on
-// prefers-reduced-motion; live elapsed time; blocked banner.
+// 16 rounds with an unlimited toggle; live round count via the host
+// goal/live bridge when running as a dynamic package (host builtin), else
+// degrades to the projection; elegant sheen sweep; blocked banner.
 window.__ModuleLoader__.load({
   id: "@dsh-plugins/goal-tracker",
   factory: (require) => {
@@ -128,6 +128,9 @@ function apply(ctx){
       reason: zh ? '受阻原因' : 'Block reason',
       revision: zh ? '修订' : 'Revision',
       progress: zh ? '进度' : 'Progress',
+      activation: zh ? '自动续跑' : 'Auto-continue',
+      activationArmed: zh ? '已武装' : 'armed',
+      activationDisarmed: zh ? '未武装' : 'disarmed',
       pause: zh ? '暂停' : 'Pause',
       resume: zh ? '恢复' : 'Resume',
       completeBtn: zh ? '完成' : 'Complete',
@@ -251,6 +254,7 @@ function apply(ctx){
       const [maxDraft, setMaxDraft] = react.useState('')
       const [pending, setPending] = react.useState(false)
       const [actionError, setActionError] = react.useState(null)
+      const [liveRounds, setLiveRounds] = react.useState(null)
       const pendingRef = react.useRef(false)
       const lastApplyAt = react.useRef(0)
 
@@ -276,6 +280,27 @@ function apply(ctx){
 
       const goal = projection && typeof projection === 'object' ? projection.goal : null
       const canRemote = !!(remoteGoals && sessionId)
+
+      // Live rounds bridge: the client goal projection only refreshes on
+      // goal/change mutations, so poll the host GoalView for the live round
+      // count (and activation) while a goal exists.
+      const goalId = goal ? goal.id : null
+      react.useEffect(() => {
+        // `host` is a dynamic-package builtin; the static client module does
+        // not provide it, so the bridge silently degrades to the projection.
+        const h = typeof host !== 'undefined' && typeof host.call === 'function' ? host : null
+        if (!goalId || !sessionId || !h) return undefined
+        let alive = true
+        const poll = () => {
+          h.call('goal/live', { sessionId: sessionId }).then((r) => {
+            if (alive && r && typeof r === 'object' && typeof r.roundsStarted === 'number') setLiveRounds(r)
+          }).catch(() => {})
+        }
+        poll()
+        if (!timer) return () => { alive = false }
+        const dispose = timer.interval(poll, 2000)
+        return () => { alive = false; dispose() }
+      }, [goalId, sessionId])
 
       const runAction = async (action) => {
         if (pendingRef.current) return null
@@ -379,12 +404,14 @@ function apply(ctx){
       const maxRounds = typeof goal.maxGoalRounds === 'number' && goal.maxGoalRounds > 0 ? goal.maxGoalRounds : 1
       const unlimited = maxRounds >= UNLIMITED
       const rounds = typeof projection.roundsStarted === 'number' ? projection.roundsStarted : 0
+      const displayRounds = liveRounds !== null && typeof liveRounds.roundsStarted === 'number' ? liveRounds.roundsStarted : rounds
+      const activation = liveRounds !== null && typeof liveRounds.activation === 'string' ? liveRounds.activation : null
       const createdAt = typeof projection.createdAt === 'number' ? projection.createdAt : 0
       const updatedAt = typeof projection.updatedAt === 'number' ? projection.updatedAt : 0
       const revision = typeof goal.revision === 'number' ? goal.revision : 0
       const blocked = goal.blockedReason && typeof goal.blockedReason === 'object' ? goal.blockedReason : null
 
-      const percent = unlimited ? Math.min(100, Math.round((rounds / 9999) * 100)) : Math.min(100, Math.round((rounds / maxRounds) * 100))
+      const percent = unlimited ? Math.min(100, Math.round((displayRounds / 9999) * 100)) : Math.min(100, Math.round((displayRounds / maxRounds) * 100))
       const elapsedMs = phase === 'complete' ? (updatedAt - createdAt) : (now - createdAt)
       const phaseLabel = phase === 'active' ? T.running : phase === 'paused' ? T.paused : phase === 'blocked' ? T.blocked : T.complete
       const glyph = phase === 'active' ? '●' : phase === 'paused' ? '⏸' : phase === 'blocked' ? '⚠' : '✓'
@@ -470,7 +497,7 @@ function apply(ctx){
       // normal bar
       const meta = react.createElement('div', { key: 'meta', className: 'gt-meta' }, [
         react.createElement('span', { key: 'rounds', className: 'gt-rounds', title: T.roundsTip },
-          T.round + ' ' + rounds + '/' + (unlimited ? T.unlimitedText : maxRounds)),
+          T.round + ' ' + displayRounds + '/' + (unlimited ? T.unlimitedText : maxRounds)),
         react.createElement('div', { key: 'track', className: 'gt-track' },
           react.createElement('div', { key: 'fill', className: 'gt-fill gt-fill-' + phase, style: { width: percent + '%' } })),
         react.createElement('span', { key: 'pct', className: 'gt-percent' }, percent + '%'),
@@ -530,13 +557,14 @@ function apply(ctx){
       if (expanded) {
         const rows = [
           [T.goal, objective],
-          [T.round, rounds + ' / ' + (unlimited ? T.unlimitedText : maxRounds)],
+          [T.round, displayRounds + ' / ' + (unlimited ? T.unlimitedText : maxRounds)],
           [T.progress, percent + '%'],
           [T.policy, modeLabel],
           [T.created, formatClock(createdAt)],
           [T.updated, formatClock(updatedAt) + ' (' + formatRelative(updatedAt, now) + ')'],
           [T.revision, String(revision)],
         ]
+        if (activation !== null) rows.push([T.activation, activation === 'armed' ? T.activationArmed : T.activationDisarmed])
         if (phase === 'complete') rows.push([T.duration, formatDuration(updatedAt - createdAt)])
         const rowEls = rows.map((pair) => react.createElement('div', { key: pair[0], className: 'gt-row' },
           react.createElement('span', { className: 'gt-row-k' }, pair[0]),

@@ -61,6 +61,11 @@ OpenCode 风格的 Goal 追踪器，用于 DeepSeek Harness（DSH）Web GUI。�
 
 - 数据源：宿主计算的 **`goal` 会话投影**。每次目标变更（`goal/change` 事件）都携带
   完整后置状态，投影折叠为 last-wins 整值——UI 无需轮询或 RPC。
+- **实时轮次桥接**：客户端投影只在变更事件时刷新，轮次准入事件不会推动它——所以
+  动态插件版本带一个宿主半（`src/dynamic-host.js`），通过包私有 RPC `goal/live`
+  （按 sessionId 解析 `goals.get(agent)` 的实时 GoalView）每 2 秒轮询，轮次/进度/
+  激活态（armed/disarmed）始终与宿主对齐。客户端模块安装版无 `host` 内置，自动
+  降级为投影值（下次变更时收敛）。
 - 渲染：注册进 `conversation.input.dock` slot（list 类型，`id: "goal-tracker"`，
   `order: 20`），通过 slot 标准 props 里的 `useProjection('goal')` 钩子订阅投影；
   sessionId 通过注册选项 `inject: (sessionId) => ({ sessionId })` 注入。

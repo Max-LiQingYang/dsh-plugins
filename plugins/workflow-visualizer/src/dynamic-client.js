@@ -409,5 +409,17 @@ return {
         DockStrip,
       )
     })
+
+    // Shadow the shipped workflow-run chat card with a null renderer
+    // (keyed slot: same key at priority -1 renders instead of the product's
+    // priority-0 entry). The shipped plugin's conversationEvents FOLD stays
+    // alive, so the installable visualizer's node data is unaffected — only
+    // the default in-chat panel disappears.
+    slots.inject('conversation.chat.node', function () {
+      slots.register(
+        { name: 'conversation.chat.node', key: 'workflow-run', priority: -1 },
+        function () { return null },
+      )
+    })
   },
 }

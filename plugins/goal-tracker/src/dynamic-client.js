@@ -1,7 +1,7 @@
 // @dsh-plugins/goal-tracker — dynamic-plugin source for cordis_define.
 //
 // This file is the `code.client` body verified live in a DSH session
-// (pluginId gtrack-1, package pkg-12). It renders the enhanced OpenCode-style
+// (pluginId gtrack-1, package pkg-14; requires the pkg-14 host half for the live-round bridge). It renders the enhanced OpenCode-style
 // goal tracker as the installable client module (../client.js), but through
 // the dynamic-plugin toolset — no host composition change, no restart.
 //
@@ -121,6 +121,9 @@ return {
       reason: zh ? '受阻原因' : 'Block reason',
       revision: zh ? '修订' : 'Revision',
       progress: zh ? '进度' : 'Progress',
+      activation: zh ? '自动续跑' : 'Auto-continue',
+      activationArmed: zh ? '已武装' : 'armed',
+      activationDisarmed: zh ? '未武装' : 'disarmed',
       pause: zh ? '暂停' : 'Pause',
       resume: zh ? '恢复' : 'Resume',
       completeBtn: zh ? '完成' : 'Complete',
@@ -244,6 +247,7 @@ return {
       const [maxDraft, setMaxDraft] = React.useState('')
       const [pending, setPending] = React.useState(false)
       const [actionError, setActionError] = React.useState(null)
+      const [liveRounds, setLiveRounds] = React.useState(null)
       const pendingRef = React.useRef(false)
       const lastApplyAt = React.useRef(0)
 
@@ -269,6 +273,27 @@ return {
 
       const goal = projection && typeof projection === 'object' ? projection.goal : null
       const canRemote = !!(remoteGoals && sessionId)
+
+      // Live rounds bridge: the client goal projection only refreshes on
+      // goal/change mutations, so poll the host GoalView for the live round
+      // count (and activation) while a goal exists.
+      const goalId = goal ? goal.id : null
+      React.useEffect(() => {
+        // `host` is a dynamic-package builtin; the static client module does
+        // not provide it, so the bridge silently degrades to the projection.
+        const h = typeof host !== 'undefined' && typeof host.call === 'function' ? host : null
+        if (!goalId || !sessionId || !h) return undefined
+        let alive = true
+        const poll = () => {
+          h.call('goal/live', { sessionId: sessionId }).then((r) => {
+            if (alive && r && typeof r === 'object' && typeof r.roundsStarted === 'number') setLiveRounds(r)
+          }).catch(() => {})
+        }
+        poll()
+        if (!timer) return () => { alive = false }
+        const dispose = timer.interval(poll, 2000)
+        return () => { alive = false; dispose() }
+      }, [goalId, sessionId])
 
       const runAction = async (action) => {
         if (pendingRef.current) return null
@@ -372,12 +397,14 @@ return {
       const maxRounds = typeof goal.maxGoalRounds === 'number' && goal.maxGoalRounds > 0 ? goal.maxGoalRounds : 1
       const unlimited = maxRounds >= UNLIMITED
       const rounds = typeof projection.roundsStarted === 'number' ? projection.roundsStarted : 0
+      const displayRounds = liveRounds !== null && typeof liveRounds.roundsStarted === 'number' ? liveRounds.roundsStarted : rounds
+      const activation = liveRounds !== null && typeof liveRounds.activation === 'string' ? liveRounds.activation : null
       const createdAt = typeof projection.createdAt === 'number' ? projection.createdAt : 0
       const updatedAt = typeof projection.updatedAt === 'number' ? projection.updatedAt : 0
       const revision = typeof goal.revision === 'number' ? goal.revision : 0
       const blocked = goal.blockedReason && typeof goal.blockedReason === 'object' ? goal.blockedReason : null
 
-      const percent = unlimited ? Math.min(100, Math.round((rounds / 9999) * 100)) : Math.min(100, Math.round((rounds / maxRounds) * 100))
+      const percent = unlimited ? Math.min(100, Math.round((displayRounds / 9999) * 100)) : Math.min(100, Math.round((displayRounds / maxRounds) * 100))
       const elapsedMs = phase === 'complete' ? (updatedAt - createdAt) : (now - createdAt)
       const phaseLabel = phase === 'active' ? T.running : phase === 'paused' ? T.paused : phase === 'blocked' ? T.blocked : T.complete
       const glyph = phase === 'active' ? '●' : phase === 'paused' ? '⏸' : phase === 'blocked' ? '⚠' : '✓'
@@ -463,7 +490,7 @@ return {
       // normal bar
       const meta = React.createElement('div', { key: 'meta', className: 'gt-meta' }, [
         React.createElement('span', { key: 'rounds', className: 'gt-rounds', title: T.roundsTip },
-          T.round + ' ' + rounds + '/' + (unlimited ? T.unlimitedText : maxRounds)),
+          T.round + ' ' + displayRounds + '/' + (unlimited ? T.unlimitedText : maxRounds)),
         React.createElement('div', { key: 'track', className: 'gt-track' },
           React.createElement('div', { key: 'fill', className: 'gt-fill gt-fill-' + phase, style: { width: percent + '%' } })),
         React.createElement('span', { key: 'pct', className: 'gt-percent' }, percent + '%'),
@@ -523,13 +550,14 @@ return {
       if (expanded) {
         const rows = [
           [T.goal, objective],
-          [T.round, rounds + ' / ' + (unlimited ? T.unlimitedText : maxRounds)],
+          [T.round, displayRounds + ' / ' + (unlimited ? T.unlimitedText : maxRounds)],
           [T.progress, percent + '%'],
           [T.policy, modeLabel],
           [T.created, formatClock(createdAt)],
           [T.updated, formatClock(updatedAt) + ' (' + formatRelative(updatedAt, now) + ')'],
           [T.revision, String(revision)],
         ]
+        if (activation !== null) rows.push([T.activation, activation === 'armed' ? T.activationArmed : T.activationDisarmed])
         if (phase === 'complete') rows.push([T.duration, formatDuration(updatedAt - createdAt)])
         const rowEls = rows.map((pair) => React.createElement('div', { key: pair[0], className: 'gt-row' },
           React.createElement('span', { className: 'gt-row-k' }, pair[0]),

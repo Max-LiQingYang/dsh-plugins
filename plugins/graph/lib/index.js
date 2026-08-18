@@ -156,6 +156,52 @@ function limiter(max) {
   }
 }
 
+/**
+ * Broadcast one `graph/*` lifecycle event to host listeners (the visualizer's
+ * aggregator). Same dispatch mechanism the workflow engine uses; every
+ * listener failure is contained so visualization can never break a run.
+ */
+function emitGraphEvent(ctx, name, payload) {
+  try {
+    const callbacks = ctx.events.dispatch('emit', [name, payload])
+    for (const callback of callbacks) {
+      try {
+        const returned = callback(payload)
+        if (returned && typeof returned.catch === 'function') returned.catch(() => {})
+      } catch { /* contained */ }
+    }
+  } catch { /* events seam unavailable: run must proceed */ }
+}
+
+/** Cap one node output for the card's meta projection (≈4KB per node). */
+const NODE_OUTPUT_CAP = 4096
+function capOutput(value) {
+  let text
+  try {
+    text = JSON.stringify(value)
+  } catch {
+    return undefined
+  }
+  if (text === undefined || text.length <= NODE_OUTPUT_CAP) return value
+  return { __truncated: true, preview: text.slice(0, NODE_OUTPUT_CAP) }
+}
+
+/** Project node-id → final output for the card, from state and the args' keys. */
+function nodeOutputsOf(args, value) {
+  const outputs = {}
+  const nodes = Array.isArray(args?.nodes) ? args.nodes : []
+  const state = value?.state
+  if (!state || typeof state !== 'object') return outputs
+  for (const node of nodes) {
+    if (!node || typeof node.id !== 'string') continue
+    const key = typeof node.writeTo === 'string' && node.writeTo !== '' ? node.writeTo : node.id
+    if (!(key in state)) continue
+    const capped = capOutput(state[key])
+    if (capped !== undefined) outputs[node.id] = capped
+  }
+  return outputs
+}
+
 export function apply(ctx, config) {
   const provider = config?.provider ?? 'spawn'
   const maxParallel = typeof config?.maxParallel === 'number' && config.maxParallel > 0 ? config.maxParallel : 6
@@ -168,8 +214,9 @@ export function apply(ctx, config) {
       schema: OUTPUT_SCHEMA,
       // Pure projection riding the tool/result event as `meta`, so the web
       // tool card (client.js, key "graph") renders the structured outcome —
-      // trace, state, endReason — instead of parsing render() text.
-      presentationMeta: (_args, value) => value,
+      // trace, state, endReason, per-node outputs — instead of parsing
+      // render() text.
+      presentationMeta: (args, value) => ({ ...value, nodeOutputs: nodeOutputsOf(args, value) }),
       render: (_args, value) => {
         const name = _args?.name ?? 'graph'
         const parts = [`${name}: ${value.endReason} after ${value.steps} step(s)`]
@@ -209,19 +256,51 @@ export function apply(ctx, config) {
       }
       if (!exec.agent) throw new Error('graph requires a calling agent session (exec.agent was undefined)')
 
+      const graphName = typeof args.name === 'string' && args.name !== '' ? args.name : 'graph'
+      const startedAt = Date.now()
+      emitGraphEvent(ctx, 'graph/run-start', {
+        name: graphName,
+        parentSession: exec.agent.session?.id,
+        entry: args.entry,
+        nodeCount: Array.isArray(args.nodes) ? args.nodes.length : 0,
+        edgeCount: Array.isArray(args.edges) ? args.edges.length : 0,
+        maxSteps: args.maxSteps ?? 100,
+        startedAt,
+      })
+
       const gate = limiter(maxParallel)
       const hooks = {
         runAgent: (node, promptText, label) => gate(async () => {
-          const run = await ctx.subagents.start(provider, {
-            label: `graph:${label}`,
-            prompt: [{ type: 'text', text: promptText }],
-            parent: exec.agent,
-            signal: exec.signal,
-            ...(node.outputSchema !== undefined ? { outputSchema: node.outputSchema } : {}),
-            ...(node.persona !== undefined ? { persona: node.persona } : {}),
+          const nodeStartedAt = Date.now()
+          let run
+          try {
+            run = await ctx.subagents.start(provider, {
+              label: `graph:${label}`,
+              prompt: [{ type: 'text', text: promptText }],
+              parent: exec.agent,
+              signal: exec.signal,
+              ...(node.outputSchema !== undefined ? { outputSchema: node.outputSchema } : {}),
+              ...(node.persona !== undefined ? { persona: node.persona } : {}),
+            })
+          } catch (error) {
+            emitGraphEvent(ctx, 'graph/node-end', {
+              name: graphName, node: node.id, childId: null, stopReason: 'error',
+              ms: Date.now() - nodeStartedAt, detail: String(error?.message ?? error),
+            })
+            throw error
+          }
+          emitGraphEvent(ctx, 'graph/node-start', {
+            name: graphName, node: node.id, label, childId: run.id, startedAt: nodeStartedAt,
           })
           try {
             const result = await run.result
+            emitGraphEvent(ctx, 'graph/node-end', {
+              name: graphName, node: node.id, childId: run.id, stopReason: result.stopReason,
+              ms: Date.now() - nodeStartedAt,
+              ...(result.structured !== undefined
+                ? { structuredPreview: capOutput(result.structured) }
+                : { textPreview: typeof result.text === 'string' ? result.text.slice(0, 500) : '' }),
+            })
             return {
               structured: result.structured,
               text: textOfBlocks(result.output),
@@ -233,7 +312,20 @@ export function apply(ctx, config) {
         }),
       }
 
-      const outcome = await runGraph(args, hooks, exec.signal)
+      let outcome
+      try {
+        outcome = await runGraph(args, hooks, exec.signal)
+      } catch (error) {
+        emitGraphEvent(ctx, 'graph/run-end', {
+          name: graphName, parentSession: exec.agent.session?.id,
+          endReason: 'error', steps: 0, ms: Date.now() - startedAt, detail: String(error?.message ?? error),
+        })
+        throw error
+      }
+      emitGraphEvent(ctx, 'graph/run-end', {
+        name: graphName, parentSession: exec.agent.session?.id,
+        endReason: outcome.endReason, steps: outcome.steps, ms: Date.now() - startedAt,
+      })
       const state = capState(outcome.state)
       return { ...outcome, state }
     },
