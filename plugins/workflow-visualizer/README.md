@@ -12,6 +12,11 @@ Claude Code 风格的 workflow 运行可视化：参照 Claude Code
   还带脚本 `log()` 叙述行。
 - **输入框上方实时进度条**（`conversation.input.dock`）：任意运行进行中时出现的一
   行摘要（名称 + 当前阶段 + 进度 + 计数），无运行时自动隐藏。
+- **隐藏 DSH 默认的 workflow 聊天卡片**：插件同时以 `priority: -1` 在
+  `conversation.chat.node` 的 `workflow-run` key 上注册 null 渲染器，把自带的
+  `dsh-client-ui-workflow-run` 面板从会话流里顶掉（keyed slot 同 key 低优先级
+  胜出）。官方插件的事件折叠保留——本插件的数据源不受影响。想恢复默认卡片，
+  删掉两处源码里 `conversation.chat.node` 的注册即可。
 
 配色全部使用 DSW 主题变量（`--dsw-alias-*`），自动适配明暗主题；文案中英双语
 （跟随 locale）。
