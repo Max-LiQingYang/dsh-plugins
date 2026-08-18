@@ -1,14 +1,15 @@
 // Browser half of @dsh-plugins/goal-tracker — client module format.
 //
 // Auto-generated twin of src/dynamic-client.js (verified live as gtrack-1
-// pkg-8). Loaded by the DSH web app through the exports["./client"] bundle
+// pkg-11). Loaded by the DSH web app through the exports["./client"] bundle
 // route and executed as a classic script.
 //
 // Features: control verbs via ctx.get("remote.goals"); completion-policy
 // modes embedded in the objective (agent / run-all-rounds / hybrid min+max /
-// true-unlimited — never self-completes, no complete button); default 16
-// rounds with an unlimited toggle; bar shows the policy chip, animated phase
-// text, live elapsed time, blocked banner, and relative update times.
+// true-unlimited — never self-completes, no complete button); agent mode
+// exposes an adjustable round cap; editor prefills the current mode; default
+// 16 rounds with an unlimited toggle; policy chip + animated status in the
+// bar; live elapsed time; blocked banner; relative update times.
 window.__ModuleLoader__.load({
   id: "@dsh-plugins/goal-tracker",
   factory: (require) => {
@@ -151,6 +152,7 @@ function apply(ctx){
       modeUnlimited: zh ? '无限执行（不自行完成）' : 'Unlimited (never self-completes)',
       minLabel: zh ? '最少轮数' : 'Min rounds',
       maxLabel: zh ? '最多轮数' : 'Max rounds',
+      maxRoundsLabel: zh ? '轮数上限' : 'Round cap',
       applyPolicy: zh ? '应用策略' : 'Apply',
       unlimitedToggle: zh ? '无限轮次' : 'Unlimited rounds',
       unlimitedText: zh ? '无限' : '∞',
@@ -254,6 +256,18 @@ function apply(ctx){
         return dispose
       }, [])
 
+      // Prefill the policy editor with the goal's CURRENT mode when opened,
+      // so a stray apply cannot silently strip or change the policy.
+      const parsedPolicyRef = react.useRef(null)
+      react.useEffect(() => {
+        if (!expanded) return
+        const p = parsedPolicyRef.current
+        if (!p) return
+        setModeDraft(p.mode)
+        setMinDraft(p.min > 0 ? String(p.min) : '')
+        setMaxDraft(p.max > 0 ? String(p.max) : '')
+      }, [expanded])
+
       const goal = projection && typeof projection === 'object' ? projection.goal : null
       const canRemote = !!(remoteGoals && sessionId)
 
@@ -351,6 +365,7 @@ function apply(ctx){
       // ── goal exists ────────────────────────────────────────────────────────
       const rawObjective = typeof goal.objective === 'string' ? goal.objective : ''
       const policy = parsePolicy(rawObjective)
+      parsedPolicyRef.current = policy
       const objective = policy.clean
       const phase = (goal.phase === 'active' || goal.phase === 'paused' || goal.phase === 'blocked' || goal.phase === 'complete')
         ? goal.phase
@@ -543,6 +558,7 @@ function apply(ctx){
             if (mMode === 'rounds') nextMax = mMax > 0 ? mMax : 16
             else if (mMode === 'hybrid') nextMax = mMax > 0 ? mMax : maxRounds
             else if (mMode === 'unlimited') nextMax = UNLIMITED
+            else nextMax = mMax > 0 ? mMax : maxRounds // agent: cap adjustable, no policy block
             const block = buildPolicy(mMode, mMin, mMax)
             const nextObjective = objective + (block ? '\n\n' + block : '')
             runAction(() => verbs.edit(nextObjective, String(nextMax))).then((result) => {
@@ -564,9 +580,11 @@ function apply(ctx){
                 react.createElement('option', { key: 'hybrid', value: 'hybrid' }, T.modeHybrid),
                 react.createElement('option', { key: 'unlimited', value: 'unlimited' }, T.modeUnlimited),
               ]),
-              (modeDraft === 'rounds' || modeDraft === 'hybrid') && react.createElement('input', {
+              modeDraft !== 'unlimited' && react.createElement('input', {
                 key: 'max', className: 'gt-input gt-input-num', type: 'number', min: '1',
-                title: T.maxLabel, placeholder: T.maxLabel, value: maxDraft,
+                title: modeDraft === 'agent' ? T.maxRoundsLabel : T.maxLabel,
+                placeholder: modeDraft === 'agent' ? T.maxRoundsLabel : T.maxLabel,
+                value: maxDraft,
                 disabled: pending,
                 onChange: (e) => setMaxDraft(e.target.value),
               }),
