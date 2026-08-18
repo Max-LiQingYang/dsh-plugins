@@ -48,6 +48,20 @@ OpenCode 风格的 Goal 追踪器，用于 DeepSeek Harness（DSH）Web GUI。�
 - 与内置 GoalBar（`id: "goal"`, `order: 10`）互不冲突，职责互补：内置版负责基础
   操作，本插件负责可视化 + 完整控制（含完成/新建/轮次上限编辑）。
 
+### 去掉内置 GoalBar（可选）
+
+如果只想要本插件的追踪条，可以在 web profile 的组合层禁用内置 goal UI 插件
+（`~/.dsh/profiles/web/cordis.patch.yml`）：
+
+```yaml
+- id: ui-goal
+  disabled: true
+```
+
+重启 `dsh web` 后内置 GoalBar 与 `/goal` 命令的自定义输入气泡不再渲染（`/goal`
+命令本身是宿主侧功能，不受影响）。注意：动态插件按进程存活，重启后需重新激活
+`gtrack-1`（或用方式 B 安装为客户端模块以获得持久效果）。
+
 ## 安装
 
 ### 方式 A：动态插件（单会话快速试用）
