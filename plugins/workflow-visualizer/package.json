@@ -1,0 +1,39 @@
+{
+  "name": "@dsh-plugins/workflow-visualizer",
+  "version": "0.1.0",
+  "description": "Claude Code-style workflow visualization for the DSH web GUI: a Workflows view tab (per-run cards, phase progress bars, drill-down agent lists) plus a live progress strip above the composer while any workflow run is active.",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "src/",
+    "README.md"
+  ],
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ]
+    }
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "plugin",
+    "workflow",
+    "visualization",
+    "subagents"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "react": "^18.2.0"
+  }
+}

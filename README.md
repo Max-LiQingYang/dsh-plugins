@@ -11,7 +11,8 @@ DSH 插件——它们以「客户端模块」的形式安装到 `dsh web` profi
 ```
 dsh-plugins/
 ├── plugins/
-│   └── goal-tracker/          # OpenCode 风格 Goal 追踪器（见 plugins/goal-tracker/README.md）
+│   ├── goal-tracker/          # OpenCode 风格 Goal 追踪器（见 plugins/goal-tracker/README.md）
+│   └── workflow-visualizer/   # Claude 风格 workflow 运行可视化（见 plugins/workflow-visualizer/README.md）
 └── package.json               # pnpm workspace 根（workspaces: plugins/*）
 ```
 
