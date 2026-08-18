@@ -39,6 +39,8 @@ function resolveLibraryDir() {
 
 var fs = null
 try { fs = require('node:fs/promises') } catch (e) {}
+var os = null
+try { os = require('node:os') } catch (e) {}
 
 function parseGraphLabel(label) {
   if (typeof label !== 'string' || label.indexOf('graph:') !== 0) return null
@@ -187,6 +189,32 @@ async function readLibraryOne(dir, id) {
   }
 }
 
+async function updateLibrary(dir, id, patch) {
+  if (!fs) throw new Error('fs unavailable')
+  if (typeof id !== 'string' || id === '') throw new Error('id required')
+  var text
+  try { text = await fs.readFile(dir + '/' + id + '.json', 'utf8') } catch (e) { return null }
+  var current
+  try { current = JSON.parse(text) } catch (e) { return null }
+  if (!current || typeof current !== 'object') return null
+  var merged = JSON.parse(JSON.stringify(current))
+  if (patch && typeof patch === 'object') {
+    if (typeof patch.name === 'string') merged.name = patch.name
+    if (patch.spec && typeof patch.spec === 'object') {
+      merged.spec = Object.assign({}, current.spec, patch.spec)
+    }
+    if (patch.runtime && typeof patch.runtime === 'object') {
+      merged.runtime = Object.assign({}, current.runtime || {}, patch.runtime)
+    }
+  }
+  merged.updatedAt = new Date().toISOString()
+  var finalPath = dir + '/' + id + '.json'
+  var tmpPath = (typeof os !== 'undefined' && os.tmpdir ? os.tmpdir() : '/tmp') + '/' + id + '.json.update.tmp'
+  await fs.writeFile(tmpPath, JSON.stringify(merged, null, 2), 'utf8')
+  await fs.rename(tmpPath, finalPath)
+  return { id: merged.id, name: merged.name, savedAt: merged.savedAt, updatedAt: merged.updatedAt, path: finalPath }
+}
+
 return {
   apply(ctx) {
     var store = { runs: [], maxRuns: 30 }
@@ -205,7 +233,10 @@ return {
         var list = await readLibraryList(libDir)
         return { count: list.length, dir: libDir }
       })
-      return function () { disp1(); disp2(); disp3(); disp4() }
+      var disp5 = harness.handle('graphLibrary.update', async function (args) {
+        return await updateLibrary(libDir, args && args.id, args && args.patch)
+      })
+      return function () { disp1(); disp2(); disp3(); disp4(); disp5() }
     })
   },
 }

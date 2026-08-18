@@ -64,6 +64,25 @@ const CSS = `\
 .gvw-graphrow-sel{background:var(--dsw-alias-bg-layer-2);outline:1px solid var(--dsw-alias-brand-primary)}
 .gvw-graphrow-name{font-weight:600;font-size:12px}
 .gvw-graphview{border:1px solid var(--dsw-alias-border-l1);border-radius:8px;background:var(--dsw-alias-bg-layer-1);padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.gvw-toolbar{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.gvw-graphview{border:1px solid var(--dsw-alias-border-l1);border-radius:8px;background:var(--dsw-alias-bg-layer-1);padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.gvw-btn:hover{color:var(--dsw-alias-label-primary);border-color:var(--dsw-alias-label-secondary)}
+.gvw-btn-primary{background:var(--dsw-alias-brand-primary);color:var(--dsw-alias-label-on-brand);border-color:var(--dsw-alias-brand-primary)}
+.gvw-btn-primary:hover{filter:brightness(1.1)}
+.gvw-btn-on{background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary);border-color:var(--dsw-alias-label-secondary)}
+.gvw-btn-dirty{box-shadow:0 0 0 1px var(--dsw-alias-state-warn-primary)}
+.gvw-btn-danger{color:var(--dsw-alias-state-error-primary);border-color:var(--dsw-alias-state-error-primary)}
+.gvw-btn:disabled{opacity:0.5;cursor:not-allowed}
+.gvw-port{fill:var(--dsw-alias-brand-primary);stroke:var(--dsw-alias-bg-layer-1);stroke-width:1;opacity:0;transition:opacity 0.15s}
+.gvw-svg:hover .gvw-port{opacity:1}
+.gvw-port:hover{opacity:1}
+.gvw-edge-sel{stroke:var(--dsw-alias-brand-primary);stroke-width:2.2}
+.gvw-edge-draft{stroke:var(--dsw-alias-brand-primary);opacity:0.7;stroke-dasharray:4 3}
+.gvw-editpanel{border:1px solid var(--dsw-alias-border-l1);border-radius:8px;background:var(--dsw-alias-bg-layer-1);padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.gvw-editrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.gvw-selbox{background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);border:1px solid var(--dsw-alias-border-l2);border-radius:6px;padding:2px 6px;font-size:12px;font-family:inherit}
+.gvw-codebox{background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);border:1px solid var(--dsw-alias-border-l2);border-radius:6px;padding:6px 8px;font-size:11px;font-family:ui-monospace,Menlo,Consolas,monospace;resize:vertical}
+.gvw-err{color:var(--dsw-alias-state-error-primary)}
 `;
 const tagId = "@dsh-plugins/graph(dynamic)";
 if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=" + JSON.stringify(tagId) + "]") === null) {
@@ -421,48 +440,66 @@ function makeGraphToolView(ctx) {
     return h("div", { className: "gvw-root" }, [head, svg, notice, liveStrip, scrubber, stepPanel, selPanel, detail]);
   };
 }
-
-/**
- * Render a topology SVG (defs + edges + nodes) into an array of React
- * elements. Shared between the per-call tool card and the Graphs tab
- * viewer so layout/drawing rules stay in lockstep.
- * @param args graph spec
- * @param opts { selected, hotNodes, hotNext, hotSelf, onClick, markerBase, entryRing }
- * @param h React.createElement
- * @returns array of elements
- */
 function renderTopology(args, opts, h) {
   const layout = computeLayout(args);
   const markerBase = opts.markerBase || "gvw-arrow";
-  const entryRing = opts.entryRing === true;
+  const positions = opts.positions instanceof Map ? opts.positions : null;
+  function posOf(id) {
+    if (positions && positions.has(id)) return positions.get(id);
+    return layout.pos.get(id) || { x: 0, y: 0, w: 150, h: 44 };
+  }
   const edgeEls = [];
-  for (const e of args.edges || []) {
-    const a = layout.pos.get(e.from);
+  for (let ei = 0; ei < (args.edges || []).length; ei += 1) {
+    const e = args.edges[ei];
+    const a = posOf(e.from);
     if (!a) continue;
     if (e.to !== undefined) {
-      const b = layout.pos.get(e.to);
+      const b = posOf(e.to);
       if (!b) continue;
       const self = e.to === e.from;
       const back = !self && b.x <= a.x;
       const hot = opts.hotNodes && opts.hotNodes.has(e.from) && ((opts.hotNext && opts.hotNext.has(e.to)) || (self && opts.hotSelf));
+      const sel = opts.selectedEdge === ei;
+      const cls = "gvw-edge" + (hot ? " gvw-edge-hot" : "") + (sel ? " gvw-edge-sel" : "");
       edgeEls.push(h("path", {
-        key: "e" + edgeEls.length,
-        className: "gvw-edge" + (hot ? " gvw-edge-hot" : ""),
+        key: "e" + ei,
+        className: cls,
         d: self ? selfLoopPath(a) : edgePath(a, b, back),
         markerEnd: "url(#" + markerBase + (hot ? "-hot" : "") + ")",
+        style: { cursor: opts.onEdgeClick ? "pointer" : "default" },
+        onClick: opts.onEdgeClick ? function (ev) { ev.stopPropagation(); opts.onEdgeClick(ei); } : undefined,
       }));
     } else {
-      edgeEls.push(h("path", { key: "e" + edgeEls.length, className: "gvw-edge gvw-edge-cond", d: "M" + (a.x + a.w) + "," + (a.y + a.h / 2) + " l38,0", markerEnd: "url(#" + markerBase + ")" }));
-      edgeEls.push(h("text", { key: "t" + edgeEls.length, className: "gvw-ntype", x: a.x + a.w + 6, y: a.y + a.h / 2 - 6 }, "route"));
+      const sel = opts.selectedEdge === ei;
+      edgeEls.push(h("path", {
+        key: "e" + ei, className: "gvw-edge gvw-edge-cond" + (sel ? " gvw-edge-sel" : ""),
+        d: "M" + (a.x + a.w) + "," + (a.y + a.h / 2) + " l38,0",
+        markerEnd: "url(#" + markerBase + ")",
+        style: { cursor: opts.onEdgeClick ? "pointer" : "default" },
+        onClick: opts.onEdgeClick ? function (ev) { ev.stopPropagation(); opts.onEdgeClick(ei); } : undefined,
+      }));
+      edgeEls.push(h("text", {
+        key: "t" + ei, className: "gvw-ntype",
+        x: a.x + a.w + 6, y: a.y + a.h / 2 - 6,
+        style: { cursor: "default" },
+      }, "route"));
     }
   }
   const nodeEls = (args.nodes || []).map((n) => {
-    const p = layout.pos.get(n.id);
+    const p = posOf(n.id);
     const hot = opts.hotNodes && opts.hotNodes.has(n.id);
     const err = opts.erroredIds && opts.erroredIds.has(n.id);
-    const cls = "gvw-node gvw-node-" + (n.type === "agent" ? "agent" : "js") + (hot ? " gvw-node-hot" : err ? " gvw-node-err" : "") + (opts.selected === n.id ? " gvw-node-sel" : "");
+    const cls = "gvw-node gvw-node-" + (n.type === "agent" ? "agent" : "js") +
+      (hot ? " gvw-node-hot" : err ? " gvw-node-err" : "") +
+      (opts.selected === n.id ? " gvw-node-sel" : "");
+    const draggable = typeof opts.onNodePointerDown === "function";
     const children = [
-      h("rect", { key: "r", className: cls, x: p.x, y: p.y, width: p.w, height: p.h, rx: 8 }),
+      h("rect", {
+        key: "r", className: cls, x: p.x, y: p.y, width: p.w, height: p.h, rx: 8,
+        style: draggable ? { cursor: "grab" } : undefined,
+        onPointerDown: draggable ? function (ev) { opts.onNodePointerDown(n.id, p, ev); } : undefined,
+        onClick: opts.onClick ? function (ev) { ev.stopPropagation(); opts.onClick(n.id); } : undefined,
+      }),
       h("text", { key: "l", className: "gvw-nlabel", x: p.x + p.w / 2, y: p.y + 18, textAnchor: "middle" }, n.id),
       h("text", { key: "t", className: "gvw-ntype", x: p.x + p.w / 2, y: p.y + 32, textAnchor: "middle" },
         (n.type === "agent" ? "◆ agent" : "◇ js") + (n.id === layout.entry ? " · entry" : "")),
@@ -472,12 +509,47 @@ function renderTopology(args, opts, h) {
       children.push(h("text", { key: "c", className: "gvw-count", x: p.x + p.w - 4, y: p.y + 10, textAnchor: "end" },
         "×" + s.runs + (s.ms ? " " + (s.ms < 1000 ? s.ms + "ms" : (s.ms / 1000).toFixed(1) + "s") : "")));
     }
-    return h("g", {
-      key: n.id,
-      style: { cursor: "pointer" },
-      onClick: opts.onClick ? () => opts.onClick(n.id) : undefined,
-    }, children);
+    const portEls = [];
+    if (typeof opts.onPortPointerDown === "function") {
+      portEls.push(h("circle", {
+        key: "pl",
+        cx: p.x,
+        cy: p.y + p.h / 2,
+        r: 5,
+        className: "gvw-port gvw-port-left",
+        "data-port": n.id + ":left",
+        style: { cursor: "crosshair" },
+        onPointerDown: function (ev) { ev.stopPropagation(); opts.onPortPointerDown(n.id, "left", p, ev); },
+      }));
+      portEls.push(h("circle", {
+        key: "pr",
+        cx: p.x + p.w,
+        cy: p.y + p.h / 2,
+        r: 5,
+        className: "gvw-port gvw-port-right",
+        "data-port": n.id + ":right",
+        style: { cursor: "crosshair" },
+        onPointerDown: function (ev) { ev.stopPropagation(); opts.onPortPointerDown(n.id, "right", p, ev); },
+      }));
+    }
+    return h("g", { key: n.id }, children.concat(portEls));
   });
+  if (opts.edgeDraft) {
+    const fromNode = (args.nodes || []).find(function (n) { return n.id === opts.edgeDraft.fromId; });
+    const start = fromNode ? posOf(fromNode.id) : null;
+    if (start && opts.edgeDraft.mx !== undefined) {
+      const sx = opts.edgeDraft.side === "right" ? start.x + start.w : start.x;
+      const sy = start.y + start.h / 2;
+      const ex = opts.edgeDraft.mx;
+      const ey = opts.edgeDraft.my;
+      edgeEls.push(h("path", {
+        key: "edraft",
+        className: "gvw-edge gvw-edge-cond gvw-edge-draft",
+        d: "M" + sx + "," + sy + " L" + ex + "," + ey,
+        markerEnd: "url(#" + markerBase + ")",
+      }));
+    }
+  }
   const defs = h("defs", null,
     h("marker", { key: "a", id: markerBase, viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 6, markerHeight: 6, orient: "auto-start-reverse" },
       h("path", { d: "M0,0 L10,5 L0,10 z", fill: "var(--dsw-alias-label-secondary)" })),
@@ -485,13 +557,12 @@ function renderTopology(args, opts, h) {
       h("path", { d: "M0,0 L10,5 L0,10 z", fill: "var(--dsw-alias-state-success-primary)" })));
   return { defs, edgeEls, nodeEls, layout };
 }
-
 /**
  * Conversation-view tab: browse all graphs (live + saved), enter one to
- * inspect its topology and per-node info, and (for live runs) open the
- * child agent's session via sessions.openSubagent. Edit operations (drag,
- * connect, create, persist edits) are deferred to a future round; this
- * round ships the read-only viewer + persistent library.
+ * inspect its topology with full editing (drag nodes, draw edges, create /
+ * delete nodes / edges, switch edge kind, save back to the library).
+ * Live runs are read-only; saved graphs are mutable and persisted via the
+ * `graphLibrary.update` RPC.
  */
 function makeGraphsView(ctx) {
   return function GraphsView() {
@@ -503,24 +574,53 @@ function makeGraphsView(ctx) {
     const selected = selState[0], setSelected = selState[1];
     const nodeSelState = React.useState(null);
     const nodeSelected = nodeSelState[0], setNodeSelected = nodeSelState[1];
+    const edgeSelState = React.useState(null);
+    const edgeSelected = edgeSelState[0], setEdgeSelected = edgeSelState[1];
     const cacheState = React.useState({});
     const savedCache = cacheState[0], setSavedCache = cacheState[1];
+    const editSpecState = React.useState(null);
+    const editSpec = editSpecState[0], setEditSpec = editSpecState[1];
+    const positionsState = React.useState(null);
+    const positions = positionsState[0], setPositions = positionsState[1];
+    const dragStateState = React.useState(null);
+    const dragState = dragStateState[0], setDragState = dragStateState[1];
+    const edgeDraftState = React.useState(null);
+    const edgeDraft = edgeDraftState[0], setEdgeDraft = edgeDraftState[1];
+    const dirtyState = React.useState(false);
+    const dirty = dirtyState[0], setDirty = dirtyState[1];
+    const savingState = React.useState(false);
+    const saving = savingState[0], setSaving = savingState[1];
+    const saveErrState = React.useState(null);
+    const saveErr = saveErrState[0], setSaveErr = saveErrState[1];
+    const routerCodeState = React.useState("");
+    const routerCode = routerCodeState[0], setRouterCode = routerCodeState[1];
+    const staticTargetState = React.useState("");
+    const staticTarget = staticTargetState[0], setStaticTarget = staticTargetState[1];
     const h = React.createElement;
+    const svgRef = React.useRef(null);
 
-    // Saved-graph fetch — unconditional hook, keyed by selected key.
     const selKey = selected;
     React.useEffect(() => {
-      if (selKey === null || typeof selKey !== "string" || selKey.indexOf("saved@") !== 0) return undefined;
+      setNodeSelected(null); setEdgeSelected(null); setEdgeDraft(null);
+      setDirty(false); setSaveErr(null);
+      if (selKey === null || typeof selKey !== "string" || selKey.indexOf("saved@") !== 0) {
+        setEditSpec(null); setPositions(null); return undefined;
+      }
       const id = selKey.slice("saved@".length);
+      setEditSpec(null); setPositions(null);
       let cancelled = false;
-      host.call("graphLibrary.get", { id: id }).then(function (v) {
-        if (cancelled || !v) return;
-        setSavedCache(function (prev) { var next = Object.assign({}, prev); next[id] = v; return next; });
-      }).catch(function () {});
+      const cached = savedCache[id];
+      if (cached && cached.spec) setEditSpec(cached.spec);
+      if (!cached) {
+        host.call("graphLibrary.get", { id: id }).then(function (v) {
+          if (cancelled || !v || !v.spec) return;
+          setSavedCache(function (prev) { var n = Object.assign({}, prev); n[id] = v; return n; });
+          setEditSpec(v.spec);
+        }).catch(function () {});
+      }
       return function () { cancelled = true; };
     }, [selKey]);
 
-    // Live + saved list polling.
     React.useEffect(() => {
       const timer = ctx && typeof ctx.get === "function" ? ctx.get("timer") : undefined;
       const refresh = () => {
@@ -538,12 +638,81 @@ function makeGraphsView(ctx) {
       return timer.interval(refresh, 2500);
     }, []);
 
-    const liveRuns = live && Array.isArray(live.runs) ? live.runs : [];
-    const liveByKey = {};
-    for (const r of liveRuns) {
-      liveByKey[(r.name || "?") + "@" + (r.parentSession || "?")] = r;
-    }
+    React.useEffect(() => {
+      function onMove(ev) {
+        if (dragState) {
+          const nx = ev.clientX - dragState.dx;
+          const ny = ev.clientY - dragState.dy;
+          setPositions(function (prev) {
+            const m = new Map(prev || []);
+            const old = m.get(dragState.id) || { x: nx, y: ny, w: 150, h: 44 };
+            m.set(dragState.id, { x: nx, y: ny, w: old.w, h: old.h });
+            return m;
+          });
+        }
+        if (edgeDraft && svgRef.current && typeof svgRef.current.getScreenCTM === "function") {
+          try {
+            const ctm = svgRef.current.getScreenCTM();
+            if (ctm) {
+              const pt = svgRef.current.createSVGPoint();
+              pt.x = ev.clientX; pt.y = ev.clientY;
+              const p = pt.matrixTransform(ctm.inverse());
+              setEdgeDraft(function (prev) { return prev ? Object.assign({}, prev, { mx: p.x, my: p.y }) : prev; });
+            }
+          } catch (e) { /* ignore */ }
+        }
+      }
+      function onUp(ev) {
+        if (dragState) { setDirty(true); setDragState(null); }
+        if (edgeDraft) {
+          const target = ev.target;
+          let hit = null;
+          if (target && typeof target.closest === "function") {
+            const port = target.closest("[data-port]");
+            if (port) {
+              const dataPort = port.getAttribute("data-port");
+              if (dataPort) hit = dataPort;
+            }
+          }
+          if (hit) {
+            const parts = hit.split(":");
+            if (parts.length === 2 && parts[0] !== edgeDraft.fromId) {
+              const newSpec = applyEdit(editSpec, { type: "addEdge", from: edgeDraft.fromId, to: parts[0], kind: "static" });
+              if (newSpec !== editSpec) { setEditSpec(newSpec); setDirty(true); }
+            }
+          }
+          setEdgeDraft(null);
+        }
+      }
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+      return function () {
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+      };
+    }, [dragState, edgeDraft, editSpec]);
 
+    React.useEffect(() => {
+      function onKey(ev) {
+        if (!editSpec) return;
+        const tag = (ev.target && ev.target.tagName) || "";
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+        if (ev.key !== "Delete" && ev.key !== "Backspace") return;
+        if (nodeSelected) {
+          const ns = applyEdit(editSpec, { type: "deleteNode", id: nodeSelected });
+          if (ns !== editSpec) { setEditSpec(ns); setDirty(true); setNodeSelected(null); }
+          ev.preventDefault();
+        } else if (edgeSelected !== null && edgeSelected !== undefined) {
+          const ns = applyEdit(editSpec, { type: "deleteEdge", index: edgeSelected });
+          if (ns !== editSpec) { setEditSpec(ns); setDirty(true); setEdgeSelected(null); }
+          ev.preventDefault();
+        }
+      }
+      window.addEventListener("keydown", onKey);
+      return function () { window.removeEventListener("keydown", onKey); };
+    }, [editSpec, nodeSelected, edgeSelected]);
+
+    const liveRuns = live && Array.isArray(live.runs) ? live.runs : [];
     const allKeys = [];
     const seen = new Set();
     for (const r of liveRuns) {
@@ -554,17 +723,17 @@ function makeGraphsView(ctx) {
       const k = "saved@" + s.id;
       if (!seen.has(k)) { allKeys.push({ kind: "saved", key: k, ref: s }); seen.add(k); }
     }
-
     function pickSelection() {
       if (selected === null || selected === undefined) return null;
       for (let i = 0; i < allKeys.length; i += 1) if (allKeys[i].key === selected) return allKeys[i];
       return null;
     }
     const sel = pickSelection();
-    const selSpec = sel && sel.kind === "live" ? (sel.ref && sel.ref.spec) : null;
     const selLive = sel && sel.kind === "live" ? sel.ref : null;
     const selSaved = sel && sel.kind === "saved" ? sel.ref : null;
     const selSavedFull = selSaved && selSaved.id && savedCache[selSaved.id] ? savedCache[selSaved.id] : null;
+    const editing = !!(sel && sel.kind === "saved" && editSpec);
+    const viewSpec = editing ? editSpec : (selLive && selLive.spec) || (selSavedFull && selSavedFull.spec);
 
     const liveAgents = selLive && Array.isArray(selLive.agents) ? selLive.agents : [];
     const agentByNode = new Map();
@@ -583,21 +752,60 @@ function makeGraphsView(ctx) {
       });
     }
 
-    // Render
+    function addNode(kind) {
+      if (!editSpec) return;
+      const ns = applyEdit(editSpec, { type: "addNode", nodeType: kind });
+      if (ns !== editSpec) { setEditSpec(ns); setDirty(true); }
+    }
+    function deleteEdge(index) {
+      if (!editSpec) return;
+      const ns = applyEdit(editSpec, { type: "deleteEdge", index: index });
+      if (ns !== editSpec) { setEditSpec(ns); setDirty(true); setEdgeSelected(null); }
+    }
+    function resetLayout() { setPositions(null); setDirty(true); }
+    async function saveEdits() {
+      if (!editSpec || !selSaved || !selSaved.id) return;
+      setSaving(true); setSaveErr(null);
+      try {
+        const res = await host.call("graphLibrary.update", {
+          id: selSaved.id,
+          patch: { spec: editSpec, runtime: { lastEditedAt: new Date().toISOString() } },
+        });
+        if (res && res.id) {
+          setSavedCache(function (prev) {
+            const n = Object.assign({}, prev);
+            const cur = n[selSaved.id] || {};
+            n[selSaved.id] = Object.assign({}, cur, { savedAt: res.savedAt, updatedAt: res.updatedAt, spec: editSpec });
+            return n;
+          });
+          setDirty(false);
+          host.call("graphLibrary.list").then(function (vs) { if (Array.isArray(vs)) setSaved(vs); }).catch(function () {});
+        } else { setSaveErr("save returned no record"); }
+      } catch (e) {
+        setSaveErr(String(e && e.message ? e.message : e));
+      } finally {
+        setSaving(false);
+      }
+    }
+
     const listChildren = allKeys.map(function (item) {
       const isSel = selected === item.key;
-      const meta = item.kind === "live" ? item.ref : item.ref;
-      const name = item.kind === "live" ? item.ref.name : item.ref.name;
+      const name = item.ref.name || "graph";
       const sub = item.kind === "live"
         ? (item.ref.endedAt === null ? "running" : "ended · " + (item.ref.endReason || "?"))
         : (item.ref.nodeCount + " nodes · " + item.ref.edgeCount + " edges · saved " + (item.ref.savedAt || "").slice(0, 19));
       const cls = "gvw-graphrow" + (isSel ? " gvw-graphrow-sel" : "");
-      return h("div", { key: item.key, className: cls, onClick: function () { setSelected(item.key); setNodeSelected(null); } }, [
-        h("div", { key: "n", className: "gvw-graphrow-name" }, (item.kind === "saved" ? "� " : "● ") + (name || "graph")),
+      return h("div", {
+        key: item.key, className: cls,
+        onClick: function () {
+          setSelected(item.key);
+          setNodeSelected(null); setEdgeSelected(null); setEdgeDraft(null);
+        },
+      }, [
+        h("div", { key: "n", className: "gvw-graphrow-name" }, (item.kind === "saved" ? "✓ " : "● ") + name),
         h("div", { key: "s", className: "gvw-sub" }, sub),
       ]);
     });
-
     const listPanel = h("div", { className: "gvw-graphlist" }, [
       h("div", { key: "t", className: "gvw-head" }, [
         h("span", { key: "title", className: "gvw-name" }, "graphs"),
@@ -610,68 +818,166 @@ function makeGraphsView(ctx) {
     ]);
 
     let viewer = null;
-    const viewSpec = selSpec || (selSavedFull && selSavedFull.spec);
     if (sel && viewSpec && Array.isArray(viewSpec.nodes) && Array.isArray(viewSpec.edges)) {
       const top = renderTopology(viewSpec, {
         selected: nodeSelected,
+        selectedEdge: edgeSelected,
         hotNodes: null,
         hotNext: null,
         hotSelf: false,
         markerBase: "gvw-arrow-tab",
-        onClick: function (id) { setNodeSelected(nodeSelected === id ? null : id); },
+        positions: editing ? positions : null,
+        onClick: editing ? function (id) { setNodeSelected(nodeSelected === id ? null : id); setEdgeSelected(null); } : null,
+        onEdgeClick: editing ? function (idx) {
+          setEdgeSelected(idx); setNodeSelected(null);
+          const edge = (editSpec.edges || [])[idx];
+          if (edge && typeof edge.router === "string") setRouterCode(edge.router);
+          if (edge && typeof edge.to === "string") setStaticTarget(edge.to);
+        } : null,
+        onNodePointerDown: editing ? function (id, p, ev) {
+          ev.preventDefault(); ev.stopPropagation();
+          setDragState({ id: id, dx: ev.clientX - p.x, dy: ev.clientY - p.y });
+        } : null,
+        onPortPointerDown: editing ? function (id, side, p, ev) {
+          ev.preventDefault();
+          setEdgeDraft({ fromId: id, side: side, mx: 0, my: 0 });
+        } : null,
+        edgeDraft: edgeDraft,
         erroredIds: erroredIds.size > 0 ? erroredIds : null,
       }, h);
-      const svg = h("div", { className: "gvw-svgwrap" },
-        h("svg", { className: "gvw-svg", viewBox: "0 0 " + top.layout.width + " " + top.layout.height, width: top.layout.width, height: top.layout.height },
-          top.defs, top.edgeEls, top.nodeEls));
+      const svg = h("svg", {
+        key: "svg", ref: svgRef,
+        className: "gvw-svg", style: { background: "transparent", touchAction: "none" },
+        viewBox: "0 0 " + top.layout.width + " " + top.layout.height,
+        width: top.layout.width, height: top.layout.height,
+        onClick: function () { setNodeSelected(null); setEdgeSelected(null); },
+      }, top.defs,
+        h("rect", { key: "bg", x: 0, y: 0, width: top.layout.width, height: top.layout.height, fill: "transparent" }),
+        top.edgeEls, top.nodeEls);
+      const svgWrap = h("div", { className: "gvw-svgwrap" }, svg);
 
-      let nodeInfo = null;
-      if (nodeSelected) {
+      let sidePanel = null;
+      if (editing && edgeSelected !== null && edgeSelected !== undefined && (editSpec.edges || [])[edgeSelected]) {
+        const edge = editSpec.edges[edgeSelected];
+        const isStatic = typeof edge.to === "string";
+        const isRouter = typeof edge.router === "string";
+        const nodeOpts = (viewSpec.nodes || []).map(function (n) {
+          return h("option", { key: n.id, value: n.id }, n.id + (n.id === viewSpec.entry ? " (entry)" : ""));
+        });
+        sidePanel = h("div", { className: "gvw-editpanel" }, [
+          h("div", { key: "h", className: "gvw-head" },
+            h("span", { key: "n", className: "gvw-name" }, "edge #" + edgeSelected),
+            h("span", { key: "k", className: "gvw-sub" }, isStatic ? "static" : "router")),
+          h("div", { key: "row", className: "gvw-editrow" }, [
+            h("button", { key: "st", className: "gvw-btn" + (isStatic ? " gvw-btn-on" : ""),
+              onClick: function () {
+                const target = staticTarget || viewSpec.entry || (viewSpec.nodes[0] && viewSpec.nodes[0].id) || "";
+                const ns = applyEdit(editSpec, { type: "setEdgeStatic", index: edgeSelected, to: target });
+                if (ns !== editSpec) { setEditSpec(ns); setDirty(true); }
+              },
+            }, "static"),
+            h("button", { key: "rt", className: "gvw-btn" + (isRouter ? " gvw-btn-on" : ""),
+              onClick: function () {
+                const code = (routerCode && routerCode.trim() !== "") ? routerCode : 'return "END"';
+                const ns = applyEdit(editSpec, { type: "setEdgeRouter", index: edgeSelected, router: code });
+                if (ns !== editSpec) { setEditSpec(ns); setDirty(true); setRouterCode(code); }
+              },
+            }, "router"),
+          ]),
+          isStatic ? h("div", { key: "st2", className: "gvw-editrow" }, [
+            h("span", { key: "l", className: "gvw-sub" }, "to:"),
+            h("select", {
+              key: "s", className: "gvw-selbox", value: staticTarget,
+              onChange: function (ev) { setStaticTarget(ev.target.value); },
+            }, nodeOpts),
+            h("button", { key: "apply", className: "gvw-btn",
+              onClick: function () {
+                const ns = applyEdit(editSpec, { type: "setEdgeStatic", index: edgeSelected, to: staticTarget });
+                if (ns !== editSpec) { setEditSpec(ns); setDirty(true); }
+              },
+            }, "apply"),
+          ]) : null,
+          isRouter ? h("div", { key: "rt2", className: "gvw-editrow" }, [
+            h("span", { key: "l", className: "gvw-sub" }, "code:"),
+            h("textarea", {
+              key: "ta", className: "gvw-codebox", rows: 3,
+              style: { flex: 1, fontFamily: "ui-monospace,Menlo,Consolas,monospace", fontSize: 11 },
+              value: routerCode,
+              onChange: function (ev) { setRouterCode(ev.target.value); },
+              onBlur: function () {
+                const ns = applyEdit(editSpec, { type: "setEdgeRouter", index: edgeSelected, router: routerCode });
+                if (ns !== editSpec) { setEditSpec(ns); setDirty(true); }
+              },
+            }),
+          ]) : null,
+          h("div", { key: "row2", className: "gvw-editrow" }, [
+            h("button", { key: "del", className: "gvw-btn gvw-btn-danger",
+              onClick: function () { deleteEdge(edgeSelected); },
+            }, "delete edge"),
+          ]),
+        ]);
+      } else if (nodeSelected && viewSpec.nodes.some(function (n) { return n.id === nodeSelected; })) {
         const node = viewSpec.nodes.find(function (n) { return n.id === nodeSelected; });
         const agent = agentByNode.get(nodeSelected);
-        if (node) {
-          const lines = [];
-          if (node.type) lines.push(node.type + (node.id === viewSpec.entry ? " · entry" : ""));
-          if (node.writeTo) lines.push("writes → " + node.writeTo);
-          if (node.description) lines.push(node.description);
-          if (agent) {
-            const el = agent.status === "running" ? "running" : (agent.ms ? (agent.ms < 1000 ? agent.ms + "ms" : (agent.ms / 1000).toFixed(1) + "s") : "?");
-            lines.push("agent: " + agent.status + " · " + el);
-          }
-          const body = h("div", null, [
-            node.prompt
-              ? h("pre", { key: "p", className: "gvw-json" }, String(node.prompt).slice(0, 1200))
-              : null,
-            node.code
-              ? h("pre", { key: "c", className: "gvw-json" }, String(node.code).slice(0, 1200))
-              : null,
-            node.outputSchema
-              ? h("pre", { key: "o", className: "gvw-json" }, prettyOutput(node.outputSchema))
-              : null,
-            agent && agent.preview
-              ? h("pre", { key: "pr", className: "gvw-json" }, (agent.preview.kind === "structured" ? prettyOutput(agent.preview.value) : agent.preview.value).slice(0, 1200))
-              : (!node.prompt && !node.code && !agent ? h("span", { key: "none", className: "gvw-muted" }, "no prompt/code/output yet") : null),
-          ]);
-          nodeInfo = h("div", { className: "gvw-sel" }, [
-            h("div", { key: "h", className: "gvw-head" },
-              h("span", { key: "n", className: "gvw-name" }, nodeSelected),
-              h("span", { key: "s", className: "gvw-sub" }, lines.join(" · "))),
-            body,
-            agent && agent.childId && selLive && selLive.parentSession
-              ? h("button", { key: "open", className: "gvw-badge", style: { cursor: "pointer", marginTop: "6px" }, onClick: function () { openAgent(agent); } }, "open agent session")
-              : null,
-          ]);
+        const lines = [];
+        if (node.type) lines.push(node.type + (node.id === viewSpec.entry ? " · entry" : ""));
+        if (node.writeTo) lines.push("writes → " + node.writeTo);
+        if (node.description) lines.push(node.description);
+        if (agent) {
+          const el = agent.status === "running" ? "running" : (agent.ms ? (agent.ms < 1000 ? agent.ms + "ms" : (agent.ms / 1000).toFixed(1) + "s") : "?");
+          lines.push("agent: " + agent.status + " · " + el);
         }
+        const body = h("div", null, [
+          node.prompt ? h("pre", { key: "p", className: "gvw-json" }, String(node.prompt).slice(0, 1200)) : null,
+          node.code ? h("pre", { key: "c", className: "gvw-json" }, String(node.code).slice(0, 1200)) : null,
+          node.outputSchema ? h("pre", { key: "o", className: "gvw-json" }, prettyOutput(node.outputSchema)) : null,
+          agent && agent.preview ? h("pre", { key: "pr", className: "gvw-json" }, (agent.preview.kind === "structured" ? prettyOutput(agent.preview.value) : agent.preview.value).slice(0, 1200)) : (!node.prompt && !node.code && !agent ? h("span", { key: "none", className: "gvw-muted" }, "no prompt/code/output yet") : null),
+        ]);
+        const openAgentBtn = (agent && agent.childId && selLive && selLive.parentSession)
+          ? h("button", { key: "open", className: "gvw-badge", style: { cursor: "pointer", marginTop: "6px" },
+              onClick: function () { openAgent(agent); },
+            }, "open agent session")
+          : null;
+        const editActions = editing
+          ? h("div", { key: "row2", className: "gvw-editrow" }, [
+              h("button", { key: "del", className: "gvw-btn gvw-btn-danger",
+                onClick: function () {
+                  const ns = applyEdit(editSpec, { type: "deleteNode", id: nodeSelected });
+                  if (ns !== editSpec) { setEditSpec(ns); setDirty(true); setNodeSelected(null); }
+                },
+              }, "delete node"),
+              h("span", { key: "hint", className: "gvw-sub" }, "or press Delete"),
+            ])
+          : null;
+        sidePanel = h("div", { className: "gvw-sel" }, [
+          h("div", { key: "h", className: "gvw-head" },
+            h("span", { key: "n", className: "gvw-name" }, nodeSelected),
+            h("span", { key: "s", className: "gvw-sub" }, lines.join(" · "))),
+          body, openAgentBtn, editActions,
+        ]);
       }
+
+      const toolbar = editing ? h("div", { className: "gvw-toolbar" }, [
+        h("button", { key: "aa", className: "gvw-btn", onClick: function () { addNode("agent"); } }, "+ agent"),
+        h("button", { key: "aj", className: "gvw-btn", onClick: function () { addNode("js"); } }, "+ js"),
+        h("button", { key: "rl", className: "gvw-btn", onClick: function () { resetLayout(); } }, "reset layout"),
+        h("span", { key: "sp" }, " "),
+        h("button", {
+          key: "sv", className: "gvw-btn gvw-btn-primary" + (dirty ? " gvw-btn-dirty" : ""),
+          disabled: !dirty || saving,
+          onClick: function () { saveEdits(); },
+        }, saving ? "saving…" : (dirty ? "save changes" : "saved")),
+        saveErr ? h("span", { key: "se", className: "gvw-sub gvw-err" }, saveErr) : null,
+      ]) : h("div", { className: "gvw-toolbar gvw-sub" }, "read-only — pick a saved graph to edit");
 
       viewer = h("div", { className: "gvw-graphview" }, [
         h("div", { key: "h", className: "gvw-head" }, [
-          h("span", { key: "n", className: "gvw-name" }, (sel.kind === "live" ? "live · " : "saved · ") + (viewSpec.name || "graph")),
+          h("span", { key: "n", className: "gvw-name" }, (sel.kind === "live" ? "live · " : editing ? "edit · " : "saved · ") + (viewSpec.name || "graph")),
           h("span", { key: "m", className: "gvw-sub" }, (viewSpec.nodes || []).length + " nodes · " + (viewSpec.edges || []).length + " edges · entry " + viewSpec.entry),
         ]),
-        svg,
-        nodeInfo,
-        h("div", { key: "edit", className: "gvw-muted" }, "editing (drag / connect / create) lands in a future round."),
+        toolbar,
+        svgWrap,
+        sidePanel,
       ]);
     }
 
