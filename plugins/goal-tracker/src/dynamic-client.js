@@ -1,7 +1,7 @@
 // @dsh-plugins/goal-tracker — dynamic-plugin source for cordis_define.
 //
 // This file is the `code.client` body verified live in a DSH session
-// (pluginId gtrack-1, package pkg-5). It renders the enhanced OpenCode-style
+// (pluginId gtrack-1, package pkg-8). It renders the enhanced OpenCode-style
 // goal tracker as the installable client module (../client.js), but through
 // the dynamic-plugin toolset — no host composition change, no restart.
 //
@@ -34,17 +34,13 @@ const CSS = `
 .gt-bar-paused{border-left-color:var(--dsw-alias-state-warn-primary)}
 .gt-bar-blocked{border-left-color:var(--dsw-alias-state-error-primary)}
 .gt-bar-complete{border-left-color:var(--dsw-alias-state-success-primary)}
-.gt-badge{flex:none;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;line-height:1;color:var(--dsw-alias-bg-base)}
-.gt-badge-active{background:var(--dsw-alias-state-success-primary);animation:gt-pulse 1.6s ease-in-out infinite}
-.gt-badge-paused{background:var(--dsw-alias-state-warn-primary)}
-.gt-badge-blocked{background:var(--dsw-alias-state-error-primary);animation:gt-pulse 1.1s ease-in-out infinite}
-.gt-badge-complete{background:var(--dsw-alias-state-success-primary)}
-@keyframes gt-pulse{0%,100%{opacity:1}50%{opacity:.55}}
+@keyframes gt-pulse{0%,100%{opacity:1}50%{opacity:.45}}
 .gt-chip{flex:none;font-size:11px;font-weight:600;line-height:20px;padding:0 8px;border-radius:999px;letter-spacing:.02em}
-.gt-chip-active{color:var(--dsw-alias-state-success-primary);background:color-mix(in srgb, var(--dsw-alias-state-success-primary) 14%, transparent)}
+.gt-chip-active{color:var(--dsw-alias-state-success-primary);background:color-mix(in srgb, var(--dsw-alias-state-success-primary) 14%, transparent);animation:gt-pulse 1.6s ease-in-out infinite}
 .gt-chip-paused{color:var(--dsw-alias-state-warn-primary);background:color-mix(in srgb, var(--dsw-alias-state-warn-primary) 14%, transparent)}
-.gt-chip-blocked{color:var(--dsw-alias-state-error-primary);background:color-mix(in srgb, var(--dsw-alias-state-error-primary) 14%, transparent)}
+.gt-chip-blocked{color:var(--dsw-alias-state-error-primary);background:color-mix(in srgb, var(--dsw-alias-state-error-primary) 14%, transparent);animation:gt-pulse 1.1s ease-in-out infinite}
 .gt-chip-complete{color:var(--dsw-alias-state-success-primary);background:color-mix(in srgb, var(--dsw-alias-state-success-primary) 14%, transparent)}
+.gt-policy-chip{flex:none;font-size:10px;line-height:18px;padding:0 6px;border-radius:6px;color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l1);white-space:nowrap;font-variant-numeric:tabular-nums}
 .gt-objective{flex:1;min-width:0;font-size:13px;line-height:20px;color:var(--dsw-alias-label-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .gt-meta{flex:none;display:flex;align-items:center;gap:8px}
 .gt-rounds{font-size:12px;color:var(--dsw-alias-label-secondary);font-variant-numeric:tabular-nums;white-space:nowrap;cursor:help}
@@ -138,16 +134,22 @@ return {
       revTip: zh ? '目标修订号：每次修改 +1' : 'Goal revision: +1 per update',
       roundsTip: zh ? '已执行轮数 / 轮数上限' : 'Rounds run / cap',
       policy: zh ? '完成策略' : 'Completion policy',
+      policyShortAgent: zh ? 'agent 决定' : 'agent decides',
+      policyShortRounds: zh ? '跑满' : 'run',
+      policyShortRoundsTail: zh ? '轮' : ' rounds',
+      policyShortHybridMin: zh ? '最少' : 'min',
+      policyShortHybridMax: zh ? '最多' : 'max',
+      policyShortUnlimited: zh ? '无限' : '∞',
       modeAgent: zh ? '由 agent 决定是否完成' : 'Agent decides',
       modeRounds: zh ? '必须执行完指定轮次' : 'Run all rounds',
       modeHybrid: zh ? 'agent 决定 + 最少/最多轮数' : 'Agent + min/max rounds',
-      modeUnlimited: zh ? '无限执行，由 agent 决定' : 'Unlimited',
+      modeUnlimited: zh ? '无限执行（不自行完成）' : 'Unlimited (never self-completes)',
       minLabel: zh ? '最少轮数' : 'Min rounds',
       maxLabel: zh ? '最多轮数' : 'Max rounds',
       applyPolicy: zh ? '应用策略' : 'Apply',
       unlimitedToggle: zh ? '无限轮次' : 'Unlimited rounds',
       unlimitedText: zh ? '无限' : '∞',
-      policyHint: zh ? '策略会写入目标文本，agent 每轮都会看到并遵守' : 'The policy is written into the objective so the agent sees it every round',
+      policyHint: zh ? '策略会写入目标文本，agent 每轮都会看到并遵守；轮次上限由驱动器硬性执行（跑满自动受阻）；无限模式永不自行完成，直到用户暂停/清除' : 'The policy is written into the objective so the agent sees it every round; the round cap is enforced by the driver (auto-blocked when exhausted); unlimited mode never self-completes until the user pauses or clears',
     }
 
     function formatDuration(ms) {
@@ -198,7 +200,7 @@ return {
         if (parts.length === 0) return ''
         return '［完成策略：agent 决定完成时机，但' + parts.join('、') + '］'
       }
-      if (mode === 'unlimited') return '［完成策略：无限执行，由 agent 决定完成时机］'
+      if (mode === 'unlimited') return '［完成策略：无限执行，持续推进直到用户手动停止，不得自行完成］'
       return ''
     }
 
@@ -383,6 +385,16 @@ return {
         onClick: (e) => { stop(e); onClick() },
       }, glyphText)
 
+      let policyShort = null
+      if (policy.mode === 'rounds') policyShort = T.policyShortRounds + ' ' + (policy.max > 0 ? policy.max : maxRounds) + T.policyShortRoundsTail
+      else if (policy.mode === 'hybrid') {
+        const parts = []
+        if (policy.min > 0) parts.push(T.policyShortHybridMin + ' ' + policy.min)
+        if (policy.max > 0) parts.push(T.policyShortHybridMax + ' ' + policy.max)
+        policyShort = parts.join('·')
+      } else if (policy.mode === 'unlimited') policyShort = T.policyShortUnlimited
+      else policyShort = T.policyShortAgent
+
       const modeLabel = policy.mode === 'rounds'
         ? T.modeRounds + '（' + (policy.max > 0 ? policy.max : maxRounds) + '）'
         : policy.mode === 'hybrid'
@@ -445,7 +457,8 @@ return {
       if (verbs) {
         if (phase === 'active' && verbs.pause) controls.push(iconBtn('pause', T.pause, '⏸', () => runAction(verbs.pause)))
         if ((phase === 'paused' || phase === 'blocked') && verbs.resume) controls.push(iconBtn('resume', T.resume, '▶', () => runAction(verbs.resume)))
-        if (phase === 'active' && verbs.complete) controls.push(iconBtn('complete', T.completeBtn, '✓', () => runAction(verbs.complete)))
+        // In unlimited mode the goal must never be completed: no ✓ button.
+        if (phase === 'active' && !unlimited && verbs.complete) controls.push(iconBtn('complete', T.completeBtn, '✓', () => runAction(verbs.complete)))
         if (verbs.edit) controls.push(iconBtn('edit', T.edit, '✎', () => { setDraft(objective); setRoundsDraft(''); setEditing(true) }))
         if (verbs.clear) controls.push(iconBtn('clear', T.clear, '×', () => runAction(verbs.clear)))
       }
@@ -468,8 +481,8 @@ return {
           }
         },
       }, [
-        React.createElement('span', { key: 'badge', className: 'gt-badge gt-badge-' + phase }, glyph),
         React.createElement('span', { key: 'chip', className: 'gt-chip gt-chip-' + phase }, phaseLabel),
+        React.createElement('span', { key: 'policy', className: 'gt-policy-chip', title: T.policy + '：' + modeLabel }, policyShort),
         React.createElement('span', { key: 'obj', className: 'gt-objective', title: objective }, objective),
         meta,
         React.createElement('div', { key: 'controls', className: 'gt-controls' }, controls),
