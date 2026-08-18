@@ -112,6 +112,17 @@ generic JSON row:
   and a **step scrubber** that replays each super-step (which frontier ran,
   where routing went) with the traversed edge highlighted — loops visibly
   walk backwards. `state & trace` expands the final state JSON.
+- **Agent outputs** — the projection also carries `nodeOutputs` (per-node
+  final values, ~4KB capped each): the scrubber shows what every node of the
+  current step produced, and clicking a node (or its output row) opens its
+  full output panel.
+- **Runtime info (dynamic variant)** — the host tool broadcasts `graph/*`
+  lifecycle events (run-start, node-start, node-end, run-end) over the Cordis
+  bus; `src/dynamic-host.js` folds them and serves a `graph.live` package
+  RPC, which the card polls while its call runs: live agent chips show which
+  node's agent is running, its elapsed time, and completed outputs as they
+  land (capped previews). The module variant degrades to topology + pulse
+  while running.
 - Dry-run calls render their validation issues and cycle report; failed calls
   render the error text.
 
@@ -124,8 +135,9 @@ functionally identical — keep them in sync.
 ## Test
 
 ```sh
-node test/engine.test.mjs   # 24 headless assertions: cycles, routing, fan-out, maxSteps, abort
-node test/client.test.mjs   # 18 assertions on the tool card's pure helpers (parse/layout/fold)
+node test/engine.test.mjs        # 24 assertions: cycles, routing, fan-out, maxSteps, abort
+node test/client.test.mjs        # 27 assertions: card helpers (parse/layout/fold/outputs/live-pick)
+node test/dynamic-host.test.mjs  # 9 assertions: live aggregator fold (events → graph.live snapshot)
 ```
 
 ## Trust

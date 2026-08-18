@@ -95,9 +95,46 @@ const t = api.__test
   check('empty result tolerated', t.nodeStats(null).size === 0)
 }
 
-// 4. plugin surface
+// 4. agent outputs (presentationMeta nodeOutputs)
 {
-  console.log('4. plugin surface')
+  console.log('4. outputOf / prettyOutput')
+  const settled = {
+    kind: 'tool-result', callId: 'c1', isError: false, content: [],
+    call: { name: 'graph', argsRaw: '{}' },
+    meta: {
+      endReason: 'end', steps: 1, state: { writer: { draft: 'hello' } }, trace: [],
+      nodeOutputs: { writer: { draft: 'hello' } },
+    },
+  }
+  const result = t.parseGraphResult(settled)
+  check('nodeOutputs reachable via meta', t.outputOf(result, 'writer') !== null)
+  check('unknown node → null', t.outputOf(result, 'nope') === null)
+  check('no nodeOutputs → null', t.outputOf({ ...result, nodeOutputs: undefined }, 'writer') === null)
+  check('pretty object', t.prettyOutput({ a: 1 }).includes('"a": 1'))
+  check('pretty long string capped', t.prettyOutput('x'.repeat(5000)).length <= 2005)
+}
+
+// 5. live run picking (dynamic host RPC snapshot)
+{
+  console.log('5. pickLiveRun')
+  const snap = {
+    now: 1000,
+    runs: [
+      { name: 'other', endedAt: null, agents: [] },
+      { name: 'loop', endedAt: null, agents: [{ node: 'a', status: 'running', startedAt: 100 }] },
+      { name: 'loop', endedAt: 900, endReason: 'end', agents: [] },
+    ],
+  }
+  const picked = t.pickLiveRun(snap, 'loop')
+  check('prefers in-flight run', picked && picked.endedAt === null && picked.agents[0].node === 'a')
+  check('fallback newest when none live', t.pickLiveRun({ runs: [{ name: 'x', endedAt: 1 }] }, 'x').endedAt === 1)
+  check('name mismatch → null', t.pickLiveRun(snap, 'ghost') === null)
+  check('empty snapshot → null', t.pickLiveRun(null, 'loop') === null)
+}
+
+// 6. plugin surface
+{
+  console.log('6. plugin surface')
   check('apply exported', typeof api.apply === 'function')
   check('inject slots', Array.isArray(api.inject) && api.inject[0] === 'slots')
 }
