@@ -67,23 +67,24 @@ without duplicating a module instance of the runtime's own packages:
 ln -s "$PWD/plugins/graph" ~/.dsh/profiles/node_modules/@dsh-plugins/graph
 ```
 
-Then add a row — in an **agent preset** (recommended; see below) or in the profile's
-`cordis.patch.yml`:
+Then mount it HOST-PLANE in the profile's `~/.dsh/profiles/web/cordis.patch.yml`, so
+EVERY agent in every preset gets the `graph` tool as an ordinary harness tool. New
+top-level rows go in an id-less `insert` entry (a bare `- id: …` patch entry is an
+override of an existing row, not an insert):
 
 ```yaml
-- id: tool-graph
-  name: '@dsh-plugins/graph'
-  config:
-    provider: spawn     # host subagent provider
-    maxParallel: 6      # agent-node concurrency cap per super-step
+- insert:
+    - id: tool-graph
+      name: '@dsh-plugins/graph'
+      config:
+        provider: spawn     # host subagent provider
+        maxParallel: 6      # agent-node concurrency cap per super-step
 ```
 
-The row publishes no services, so it needs no isolate realm; the `subagents` registry and its
-providers stay on the host plane. Start a session on the preset and the `graph` tool is callable.
-
-> If you mount it via a copied `cordis` preset, note `tool-cordis` registers fixed-id providers in
-> the process-global inspect registry, so that copy cannot mount while a stock `cordis`-preset
-> session is live in the same process. Keep `tool-cordis` disabled in such copies.
+Verify without booting with `dsh --profile web --dump-config`, then restart `dsh web`.
+The row publishes no services, so it needs no isolate realm; the `subagents` registry
+and its providers stay on the host plane, and the tool registers into the layered
+`tools` registry where every agent sees it.
 
 ## Config
 
