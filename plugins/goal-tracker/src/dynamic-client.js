@@ -1,8 +1,9 @@
 // @dsh-plugins/goal-tracker — dynamic-plugin source for cordis_define.
 //
-// This file is the exact `code.client` body that was verified live in a DSH
-// session (pluginId gtrack-1, package pkg-7). It renders the enhanced
-// OpenCode-style goal tracker as the installable client module
+// This file is the `code.client` body verified live in a DSH session
+// (pluginId gtrack-1, package pkg-7; this copy merges two equivalent
+// phase-condition lines and drops an unused translation key). It renders the
+// enhanced OpenCode-style goal tracker as the installable client module
 // (../client.js), but through the dynamic-plugin toolset — no host
 // composition change, no restart.
 //
