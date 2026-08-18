@@ -17,6 +17,7 @@
  */
 
 import { runGraph, validateGraph, textOfBlocks } from './engine.js'
+import { createLibrary } from './library.js'
 
 export const name = 'tool-graph'
 
@@ -43,6 +44,7 @@ const PARAMETERS = {
   properties: {
     name: { type: 'string', description: 'Short kebab-case graph name, used in labels and trace.' },
     dryRun: { type: 'boolean', description: 'Validate the graph without executing nodes. Returns issues and cycle detection.' },
+    persist: { type: 'boolean', description: 'Persist this graph definition to the graph library for later reuse and editing. Omit for one-shot runs.' },
     entry: { type: 'string', description: 'Node id where execution starts.' },
     state: { type: 'object', additionalProperties: true, description: 'Initial shared state (plain JSON object).' },
     maxSteps: { type: 'integer', description: 'Super-step budget. Default 100. 0 = unlimited (truly unbounded loop until END routing or cancellation).' },
@@ -90,6 +92,7 @@ const OUTPUT_SCHEMA = {
     endReason: { type: 'string', enum: ['end', 'max-steps', 'aborted', 'error', 'dry-run'] },
     steps: { type: 'integer' },
     state: { type: 'object', additionalProperties: true },
+    savedId: { type: 'string' },
     trace: {
       type: 'array',
       items: {
@@ -202,9 +205,22 @@ function nodeOutputsOf(args, value) {
   return outputs
 }
 
+/** Resolve the library directory: $DSH_HOME/graphs, or ~/.dsh/graphs as fallback. */
+function resolveGraphLibraryDir() {
+  const home = process.env.DSH_HOME || ''
+  if (home !== '') return home + '/graphs'
+  const fallback = process.env.HOME || process.env.USERPROFILE || '.'
+  return fallback + '/.dsh/graphs'
+}
+
 export function apply(ctx, config) {
   const provider = config?.provider ?? 'spawn'
   const maxParallel = typeof config?.maxParallel === 'number' && config.maxParallel > 0 ? config.maxParallel : 6
+
+  // FS-backed graph library, process-global via ctx.provide so other host
+  // plugins (the dynamic editor) can read/write saved graphs.
+  const library = createLibrary({ dir: resolveGraphLibraryDir() })
+  ctx.provide('graphLibrary', library)
 
   ctx.tools.register({
     name: 'graph',
@@ -266,6 +282,13 @@ export function apply(ctx, config) {
         edgeCount: Array.isArray(args.edges) ? args.edges.length : 0,
         maxSteps: args.maxSteps ?? 100,
         startedAt,
+        spec: {
+          name: graphName,
+          entry: args.entry,
+          nodes: args.nodes,
+          edges: args.edges,
+          maxSteps: args.maxSteps ?? 100,
+        },
       })
 
       const gate = limiter(maxParallel)
@@ -326,8 +349,40 @@ export function apply(ctx, config) {
         name: graphName, parentSession: exec.agent.session?.id,
         endReason: outcome.endReason, steps: outcome.steps, ms: Date.now() - startedAt,
       })
+
+      // Optional long-term persistence — only when the caller asked for it
+      // AND the run produced an executable graph (skip dry-run / validation
+      // failures / aborted-zero-step runs so the library isn't polluted with
+      // non-runnable specs).
+      let savedId = undefined
+      if (args.persist === true && outcome.endReason !== 'dry-run' && outcome.steps > 0) {
+        try {
+          const saved = await library.save({
+            spec: {
+              name: graphName,
+              entry: args.entry,
+              nodes: args.nodes,
+              edges: args.edges,
+              maxSteps: args.maxSteps ?? 100,
+            },
+            runtime: {
+              lastEndReason: outcome.endReason,
+              lastSteps: outcome.steps,
+              lastRunAt: new Date().toISOString(),
+            },
+          })
+          savedId = saved.id
+          emitGraphEvent(ctx, 'graph/saved', {
+            id: saved.id, name: saved.name, savedAt: saved.savedAt,
+            parentSession: exec.agent.session?.id,
+          })
+        } catch (e) {
+          console.warn('graph: library save failed:', e?.message ?? e)
+        }
+      }
+
       const state = capState(outcome.state)
-      return { ...outcome, state }
+      return { ...outcome, state, ...(savedId !== undefined ? { savedId } : {}) }
     },
   })
 }

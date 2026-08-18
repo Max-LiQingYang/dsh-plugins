@@ -123,6 +123,20 @@ generic JSON row:
   node's agent is running, its elapsed time, and completed outputs as they
   land (capped previews). The module variant degrades to topology + pulse
   while running.
+- **Persistence** — graphs are one-shot by default; pass `persist: true`
+  in the call args and the host tool saves the spec to the graph library
+  (`$DSH_HOME/graphs/` or `~/.dsh/graphs/`) as an atomic JSON file
+  (`<id>.json` via tmp-then-rename), and emits a `graph/saved` Cordis
+  event for tab reactivity. The host registers a `graphLibrary` Cordis
+  Service (`{list, get, save, update, remove}`); the dynamic editor's
+  `graphLibrary.list` / `.get` / `.count` RPCs read the same directory.
+- **Graphs tab** — the dynamic client adds a `conversation.view` slot
+  (`id "graphs"`) showing live + saved graphs as a two-pane list +
+  viewer. Click a row to enter the graph: static topology render with
+  per-node info on click, and an "open agent session" deep link
+  (`sessions.openSubagent`) for live runs that own a child session.
+  Editor interactivity (drag, connect, create, persist edits) is on the
+  roadmap — the viewer stays read-only this round.
 - Dry-run calls render their validation issues and cycle report; failed calls
   render the error text.
 
@@ -137,7 +151,8 @@ functionally identical — keep them in sync.
 ```sh
 node test/engine.test.mjs        # 24 assertions: cycles, routing, fan-out, maxSteps, abort
 node test/client.test.mjs        # 27 assertions: card helpers (parse/layout/fold/outputs/live-pick)
-node test/dynamic-host.test.mjs  # 9 assertions: live aggregator fold (events → graph.live snapshot)
+node test/dynamic-host.test.mjs  # 10 assertions: live aggregator fold (events → graph.live snapshot)
+node test/library.test.mjs       # 23 assertions: FS library save/list/get/remove/atomicity/dedup/update
 ```
 
 ## Trust
