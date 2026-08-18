@@ -49,7 +49,7 @@ const CSS = `
 .gt-chip-complete{color:var(--dsw-alias-state-success-primary);background:color-mix(in srgb, var(--dsw-alias-state-success-primary) 14%, transparent)}
 .gt-objective{flex:1;min-width:0;font-size:13px;line-height:20px;color:var(--dsw-alias-label-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .gt-meta{flex:none;display:flex;align-items:center;gap:8px}
-.gt-rounds{font-size:12px;color:var(--dsw-alias-label-secondary);font-variant-numeric:tabular-nums;white-space:nowrap}
+.gt-rounds{font-size:12px;color:var(--dsw-alias-label-secondary);font-variant-numeric:tabular-nums;white-space:nowrap;cursor:help}
 .gt-percent{font-size:11px;color:var(--dsw-alias-label-tertiary);font-variant-numeric:tabular-nums;white-space:nowrap;min-width:30px;text-align:right}
 .gt-track{width:64px;height:5px;border-radius:3px;background:var(--dsw-alias-border-l1);overflow:hidden}
 .gt-fill{height:100%;border-radius:3px;transition:width .3s ease}
@@ -58,7 +58,7 @@ const CSS = `
 .gt-fill-blocked{background:var(--dsw-alias-state-error-primary)}
 .gt-fill-complete{background:var(--dsw-alias-state-success-primary)}
 .gt-elapsed{font-size:12px;color:var(--dsw-alias-label-secondary);font-variant-numeric:tabular-nums;white-space:nowrap}
-.gt-rev{flex:none;font-size:10px;color:var(--dsw-alias-label-tertiary);border:1px solid var(--dsw-alias-border-l1);border-radius:4px;padding:0 4px;line-height:14px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.gt-rev{flex:none;font-size:10px;color:var(--dsw-alias-label-tertiary);border:1px solid var(--dsw-alias-border-l1);border-radius:4px;padding:0 4px;line-height:14px;white-space:nowrap;font-variant-numeric:tabular-nums;cursor:help}
 .gt-controls{flex:none;display:flex;align-items:center;gap:2px}
 .gt-icon-btn{width:26px;height:26px;border:none;border-radius:8px;background:transparent;color:var(--dsw-alias-label-tertiary);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-size:12px;line-height:1;padding:0;font-family:inherit}
 .gt-icon-btn:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
@@ -133,6 +133,8 @@ return {
       hrAgo: zh ? '小时前' : 'h ago',
       daysAgo: zh ? '天前' : 'd ago',
       create: zh ? '创建' : 'Create',
+      revTip: zh ? '修订号：每次持久化变更 +1（创建/编辑/暂停/恢复/完成/阻断/清除）' : 'Revision: +1 per durable mutation (create/edit/pause/resume/complete/block/clear)',
+      roundsTip: zh ? '已准入的自主推进轮数（blocked 期间不增长，与修订号相互独立）' : 'Admitted continuation rounds (independent of the revision; does not grow while blocked)',
     }
 
     function formatDuration(ms) {
@@ -348,14 +350,14 @@ return {
 
       // normal bar
       const meta = React.createElement('div', { key: 'meta', className: 'gt-meta' }, [
-        React.createElement('span', { key: 'rounds', className: 'gt-rounds' },
+        React.createElement('span', { key: 'rounds', className: 'gt-rounds', title: T.roundsTip },
           T.round + ' ' + rounds + '/' + maxRounds),
         React.createElement('div', { key: 'track', className: 'gt-track' },
           React.createElement('div', { key: 'fill', className: 'gt-fill gt-fill-' + phase, style: { width: percent + '%' } })),
         React.createElement('span', { key: 'pct', className: 'gt-percent' }, percent + '%'),
         React.createElement('span', { key: 'elapsed', className: 'gt-elapsed' },
           T.elapsed + ' ' + formatDuration(elapsedMs)),
-        React.createElement('span', { key: 'rev', className: 'gt-rev' }, 'rev ' + revision),
+        React.createElement('span', { key: 'rev', className: 'gt-rev', title: T.revTip }, 'rev ' + revision),
       ])
 
       const controls = []

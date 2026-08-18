@@ -137,6 +137,8 @@ window.__ModuleLoader__.load({
         hrAgo: zh ? "小时前" : "h ago",
         daysAgo: zh ? "天前" : "d ago",
         create: zh ? "创建" : "Create",
+        revTip: zh ? "修订号：每次持久化变更 +1（创建/编辑/暂停/恢复/完成/阻断/清除）" : "Revision: +1 per durable mutation (create/edit/pause/resume/complete/block/clear)",
+        roundsTip: zh ? "已准入的自主推进轮数（blocked 期间不增长，与修订号相互独立）" : "Admitted continuation rounds (independent of the revision; does not grow while blocked)",
       };
 
       function formatDuration(ms) {
@@ -352,14 +354,14 @@ window.__ModuleLoader__.load({
 
         // normal bar
         const meta = react.createElement("div", { key: "meta", className: "gt-meta" }, [
-          react.createElement("span", { key: "rounds", className: "gt-rounds" },
+          react.createElement("span", { key: "rounds", className: "gt-rounds", title: T.roundsTip },
             T.round + " " + rounds + "/" + maxRounds),
           react.createElement("div", { key: "track", className: "gt-track" },
             react.createElement("div", { key: "fill", className: "gt-fill gt-fill-" + phase, style: { width: percent + "%" } })),
           react.createElement("span", { key: "pct", className: "gt-percent" }, percent + "%"),
           react.createElement("span", { key: "elapsed", className: "gt-elapsed" },
             T.elapsed + " " + formatDuration(elapsedMs)),
-          react.createElement("span", { key: "rev", className: "gt-rev" }, "rev " + revision),
+          react.createElement("span", { key: "rev", className: "gt-rev", title: T.revTip }, "rev " + revision),
         ]);
 
         const controls = [];
