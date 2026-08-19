@@ -328,7 +328,31 @@ return {
         sessionOptions.push(React.createElement('option', { key: s.id, value: s.id }, s.title || s.id))
       }
 
-      const onSelect = (e) => { setSelectedSessionId(e.target.value || ''); setSelectedId(null) }
+      const onSelect = (e) => {
+        const newId = e.target.value || ''
+        setSelectedSessionId(newId)
+        setSelectedId(null)
+        loadHistoryNow(newId)
+      }
+      const loadHistoryNow = (forcedId) => {
+        const h = typeof host !== 'undefined' && typeof host.call === 'function' ? host : null
+        if (!h) { setError('host bridge unavailable'); return }
+        setLoading(true); setError(null)
+        const args = forcedId ? { sessionId: forcedId } : { sessionIds: sessions.map((s) => s.id).filter(Boolean) }
+        if (!args.sessionId && (!args.sessionIds || args.sessionIds.length === 0)) {
+          setLoading(false); setHistory([]); return
+        }
+        h.call('goal/history', args).then((r) => {
+          setLoading(false)
+          if (r && r.ok && Array.isArray(r.goals)) {
+            setHistory(r.goals)
+            if (selectedId && !r.goals.find((g) => g.id === selectedId)) setSelectedId(null)
+          } else {
+            setError((r && r.message) || 'failed to load history')
+            setHistory([])
+          }
+        }).catch((e) => { setLoading(false); setError(String(e && e.message || e)); setHistory([]) })
+      }
 
       const toolbar = React.createElement('div', { className: 'gt-gv-toolbar' }, [
         React.createElement('span', { key: 't', className: 'gt-gv-title' }, T.gvTitle + ' (' + goals.length + ')'),
