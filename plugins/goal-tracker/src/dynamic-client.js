@@ -83,7 +83,9 @@ const CSS = `
 .gt-check input{accent-color:var(--dsw-alias-state-business-primary)}
 .gt-policy-hint{font-size:11px;color:var(--dsw-alias-label-caption)}
 .gt-gv-list{display:flex;flex-direction:column;gap:8px;padding:16px;max-width:760px;margin:0 auto;font-size:13px;color:var(--dsw-alias-label-primary)}
-.gt-gv-toolbar{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.gt-gv-toolbar{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.gt-gv-select{max-width:240px;height:26px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);border-radius:7px;outline:none;padding:0 6px;font-size:12px}
+.gt-gv-row-other .gt-gv-row-obj{opacity:.85}
 .gt-gv-title{font-size:14px;font-weight:600}
 .gt-gv-refresh{height:26px;padding:0 10px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);border-radius:7px;cursor:pointer;font-size:12px}
 .gt-gv-refresh:hover{border-color:var(--dsw-alias-state-business-primary)}
@@ -199,6 +201,11 @@ return {
       gvSectionTimeline: zh ? '修改记录' : 'Modification history',
       gvSectionResult: zh ? '运行结果' : 'Run result',
       gvRunMeta: zh ? '（AI 最终回复）' : '(AI final reply)',
+      gvSessionLabel: zh ? '会话' : 'Session',
+      gvAllSessions: zh ? '全部会话（合并）' : 'All sessions (merged)',
+      gvSessionCurrent: zh ? '当前' : 'current',
+      gvSessionOther: zh ? '其他' : 'other',
+      gvErrSessions: zh ? '（加载会话列表失败）' : '(failed to load sessions)',
     }
 
     function formatDuration(ms) {
@@ -263,39 +270,70 @@ return {
     }
 
     // ── GoalsHistoryView ────────────────────────────────────────────────────
+    // Cross-session goals history. State:
+    //   selectedSessionId = ''  → aggregate all known sessions (merge view)
+    //   selectedSessionId = id   → only that session's goals
+    //   sessions = the dropdown list (id + title + createdAt)
     function GoalsHistoryView(props) {
-      const sessionId = props.sessionId
+      const currentSessionId = props.sessionId
       const [history, setHistory] = React.useState(null)
       const [loading, setLoading] = React.useState(false)
       const [error, setError] = React.useState(null)
       const [selectedId, setSelectedId] = React.useState(null)
+      const [selectedSessionId, setSelectedSessionId] = React.useState(currentSessionId || '')
+      const [sessions, setSessions] = React.useState([])
+      const [sessionsError, setSessionsError] = React.useState(null)
 
-      const load = React.useCallback(() => {
-        if (!sessionId) return
+      const loadSessions = React.useCallback(() => {
+        const h = typeof host !== 'undefined' && typeof host.call === 'function' ? host : null
+        if (!h) { setSessionsError('host bridge unavailable'); return }
+        h.call('goal/sessions', { maxN: 20 }).then((r) => {
+          if (r && r.ok && Array.isArray(r.sessions)) setSessions(r.sessions)
+          else setSessionsError((r && r.message) || 'failed to load sessions')
+        }).catch((e) => setSessionsError(String(e && e.message || e)))
+      }, [])
+
+      const loadHistory = React.useCallback(() => {
         const h = typeof host !== 'undefined' && typeof host.call === 'function' ? host : null
         if (!h) { setError('host bridge unavailable'); return }
         setLoading(true); setError(null)
-        h.call('goal/history', { sessionId: sessionId }).then((r) => {
+        const args = selectedSessionId ? { sessionId: selectedSessionId } : { sessionIds: sessions.map((s) => s.id).filter(Boolean) }
+        if (!args.sessionId && (!args.sessionIds || args.sessionIds.length === 0)) {
+          setLoading(false); setHistory([]); return
+        }
+        h.call('goal/history', args).then((r) => {
           setLoading(false)
           if (r && r.ok && Array.isArray(r.goals)) {
             setHistory(r.goals)
             if (selectedId && !r.goals.find((g) => g.id === selectedId)) setSelectedId(null)
           } else {
-            setError(r && r.message ? r.message : 'failed to load history')
+            setError((r && r.message) || 'failed to load history')
             setHistory([])
           }
         }).catch((e) => { setLoading(false); setError(String(e && e.message || e)); setHistory([]) })
-      }, [sessionId, selectedId])
+      }, [selectedSessionId, sessions, selectedId])
 
-      React.useEffect(() => { load() }, [load])
+      React.useEffect(() => { loadSessions() }, [loadSessions])
+      React.useEffect(() => { loadHistory() }, [loadHistory])
 
       const goals = history || []
       const selected = selectedId ? goals.find((g) => g.id === selectedId) : null
 
+      // Build the session <select>. Current session first (labeled), then the rest.
+      const sessionOptions = []
+      sessionOptions.push(React.createElement('option', { key: 'all', value: '' }, T.gvAllSessions))
+      if (currentSessionId) sessionOptions.push(React.createElement('option', { key: 'cur', value: currentSessionId }, (T.gvSessionCurrent + ' · ' + (sessions.find((s) => s.id === currentSessionId) || {}).title || currentSessionId)))
+      for (const s of sessions) {
+        if (!s || !s.id || s.id === currentSessionId) continue
+        sessionOptions.push(React.createElement('option', { key: s.id, value: s.id }, s.title || s.id))
+      }
+
+      const onSelect = (e) => { setSelectedSessionId(e.target.value || ''); setSelectedId(null) }
+
       const toolbar = React.createElement('div', { className: 'gt-gv-toolbar' }, [
         React.createElement('span', { key: 't', className: 'gt-gv-title' }, T.gvTitle + ' (' + goals.length + ')'),
-        React.createElement('button', { key: 'r', className: 'gt-gv-refresh', onClick: load, disabled: loading },
-          loading ? '…' : T.gvRefresh),
+        React.createElement('select', { key: 's', className: 'gt-gv-select', value: selectedSessionId, onChange: onSelect, disabled: sessions.length === 0 }, sessionOptions),
+        React.createElement('button', { key: 'r', className: 'gt-gv-refresh', onClick: () => { loadSessions(); loadHistory() }, disabled: loading }, loading ? '…' : T.gvRefresh),
       ])
 
       if (selected) {
@@ -310,7 +348,9 @@ return {
           : policy.mode === 'hybrid' ? T.modeHybrid + (policy.min > 0 ? '（最少 ' + policy.min + '）' : '') + (policy.max > 0 ? '（最多 ' + policy.max + '）' : '')
           : policy.mode === 'unlimited' ? T.modeUnlimited
           : T.modeAgent
-        const rows = [
+        const sessionTitle = sessions.find((s) => s.id === selected.sessionId)
+        const sessionCell = sessionTitle ? [zh ? '会话' : 'Session', sessionTitle.title || selected.sessionId] : null
+        const baseRows = [
           [T.goal, selected.objective],
           [T.round, selected.roundsStarted + ' / ' + (selected.maxGoalRounds >= UNLIMITED ? T.unlimitedText : selected.maxGoalRounds)],
           [T.progress, (selected.maxGoalRounds >= UNLIMITED ? '' : Math.min(100, Math.round((selected.roundsStarted / selected.maxGoalRounds) * 100))) + '%'],
@@ -320,6 +360,7 @@ return {
           [T.updated, formatClock(selected.updatedAt)],
           [T.revision, String(selected.revision)],
         ]
+        const rows = sessionCell ? [sessionCell, ...baseRows] : baseRows
         const detailRows = rows.map((pair) => React.createElement('div', { key: pair[0], className: 'gt-row' },
           React.createElement('span', { className: 'gt-row-k' }, pair[0]),
           React.createElement('span', { className: 'gt-row-v' }, String(pair[1] || '—'))))
@@ -328,7 +369,7 @@ return {
         return React.createElement('div', { className: 'gt-gv-list' }, [
           React.createElement('div', { key: 'tb', className: 'gt-gv-toolbar' }, [
             React.createElement('button', { className: 'gt-gv-back', onClick: () => setSelectedId(null) }, T.gvBack),
-            React.createElement('button', { className: 'gt-gv-refresh', onClick: load, disabled: loading }, loading ? '…' : T.gvRefresh),
+            React.createElement('button', { className: 'gt-gv-refresh', onClick: () => { loadSessions(); loadHistory() }, disabled: loading }, loading ? '…' : T.gvRefresh),
           ]),
           React.createElement('div', { key: 'd', className: 'gt-gv-detail' }, [
             React.createElement('div', { key: 'h', className: 'gt-gv-section-title' }, T.gvSectionObjective + ' · ' + T.gvSectionStatus + ' · ' + T.gvSectionPolicy),
@@ -349,27 +390,26 @@ return {
           React.createElement('div', { className: 'gt-gv-empty' }, '…'),
         ])
       }
-      if (error && goals.length === 0) {
-        return React.createElement('div', { className: 'gt-gv-list' }, [
-          toolbar,
-          React.createElement('div', { className: 'gt-gv-empty' }, error),
-        ])
-      }
+      const emptyMessage = sessionsError ? T.gvErrSessions : (error || T.gvEmpty)
       if (goals.length === 0) {
         return React.createElement('div', { className: 'gt-gv-list' }, [
           toolbar,
-          React.createElement('div', { className: 'gt-gv-empty' }, T.gvEmpty),
+          React.createElement('div', { className: 'gt-gv-empty' }, emptyMessage),
         ])
       }
+      const titleById = new Map()
+      for (const s of sessions) if (s && s.id) titleById.set(s.id, s.title || s.id)
       const listRows = goals.map((g) => {
         const objText = parsePolicy(g.objective || '').clean || g.objective || ''
         const updated = formatShortClock(g.updatedAt)
+        const other = g.sessionId && g.sessionId !== currentSessionId
         return React.createElement('div', {
-          key: g.id, className: 'gt-gv-row' + (selectedId === g.id ? ' active' : ''),
+          key: g.sessionId + ':' + g.id,
+          className: 'gt-gv-row' + (selectedId === g.id ? ' active' : '') + (other ? ' gt-gv-row-other' : ''),
           onClick: () => setSelectedId(g.id),
         }, [
           React.createElement('span', { className: 'gt-gv-row-obj', title: objText }, objText || '—'),
-          React.createElement('span', { className: 'gt-gv-row-meta' }, updated),
+          React.createElement('span', { className: 'gt-gv-row-meta' }, updated + (other && titleById.get(g.sessionId) ? (' · ' + titleById.get(g.sessionId).slice(0, 12)) : '')),
           React.createElement('span', { className: 'gt-gv-row-phase gt-gv-row-phase-' + g.phase }, g.phase === 'complete' ? T.complete : g.phase === 'active' ? T.running : g.phase === 'paused' ? T.paused : g.phase === 'blocked' ? T.blocked : g.phase),
         ])
       })
