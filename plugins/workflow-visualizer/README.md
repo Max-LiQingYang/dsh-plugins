@@ -99,22 +99,27 @@ DSH 的 workflow 引擎在运行时会同时发出**两路信号**，本插件�
 ### 方式 B：客户端模块（正式安装，重启常驻）
 
 ```sh
-# 本地路径（开发，或用软链：ln -s 到 profile 的 node_modules）
+# 本地路径（开发）
 dsh plugin --profile web add file:/path/to/dsh-plugins/plugins/workflow-visualizer
 # 发布到 npm 后
 dsh plugin --profile web add @dsh-plugins/workflow-visualizer
 ```
 
-在 `~/.dsh/profiles/web/cordis.patch.yml` 挂一行：
+包内自带 **bundle 组合补丁**（`dsh.bundle.patch` → `cordis.patch.yml`）：通过 `dsh plugin add`
+安装后，插件自己的组合行会**自动挂进配置层栈**——无需手改任何配置，直接重启 `dsh web` 即可。
 
-```yaml
-- insert:
-    - id: workflow-visualizer
-      name: '@dsh-plugins/workflow-visualizer'
-```
+> 💡 只有用**手动软链**装进 profile 的 node_modules 时才需要手动补一行（symlink 不走
+> 插件安装流程）：
+>
+> ```yaml
+> # ~/.dsh/profiles/web/cordis.patch.yml
+> - insert:
+>     - id: workflow-visualizer
+>       name: '@dsh-plugins/workflow-visualizer'
+> ```
 
-重启 `dsh web`。安装版的客户端模块会被 web 的 `dsh.client` 扫描器自动发现（无需宿主逻辑，
-`index.js` 只是空 `apply`）。
+安装版的客户端模块会被 web 的 `dsh.client` 扫描器自动发现（无需宿主逻辑，`index.js`
+只是空 `apply`）。
 
 > ⚠️ 两种形态使用相同的 slot id（`workflows` / `workflow-live`），**同一会话不要同时启用**。
 > 动态版重启后消失、安装版重启后接管，天然错峰，不冲突。
