@@ -1,15 +1,16 @@
 // Browser half of @dsh-plugins/goal-tracker — client module format.
 //
 // Auto-generated twin of src/dynamic-client.js (verified live as gtrack-1
-// pkg-18). Loaded by the DSH web app through the exports["./client"] bundle
+// pkg-19). Loaded by the DSH web app through the exports["./client"] bundle
 // route and executed as a classic script.
 //
 // Features: control verbs via ctx.get("remote.goals"); completion-policy
 // modes embedded in the objective (agent / run-all-rounds / hybrid min+max /
-// true-unlimited); agent mode cap input; editor prefill; live round bridge
-// via host goal/live (dynamic only); friendly blocked banner (no raw codes,
-// exhausted shows 轮次已跑满 (n/m)); completed goals hide x/n rounds and
-// progress; elapsed shows the bare value; sheen sweep; relative times.
+// true-unlimited — never self-completes, no button); agent mode cap input;
+// editor prefills current mode; default 16 rounds + unlimited toggle;
+// live round bridge via host goal/live (dynamic only); Goals history
+// sub-tab; friendly blocked banner; completed-bar cleanup; elegant sheen
+// sweep gated on prefers-reduced-motion.
 window.__ModuleLoader__.load({
   id: "@dsh-plugins/goal-tracker",
   factory: (require) => {
@@ -19,7 +20,6 @@ window.__ModuleLoader__.load({
 
     let react = require("react");
 
-    // ── styles (tagged for the client-modules HMR bookkeeping) ──────────────
     const CSS = `\
 
 .gt-dock{box-sizing:border-box;width:calc(100% - var(--dsh-composer-side-clearance) - var(--dsh-composer-side-clearance) - var(--dsh-composer-dock-inset) - var(--dsh-composer-dock-inset));margin:0 auto}
@@ -80,6 +80,33 @@ window.__ModuleLoader__.load({
 .gt-check{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--dsw-alias-label-secondary);cursor:pointer}
 .gt-check input{accent-color:var(--dsw-alias-state-business-primary)}
 .gt-policy-hint{font-size:11px;color:var(--dsw-alias-label-caption)}
+.gt-gv-list{display:flex;flex-direction:column;gap:8px;padding:16px;max-width:760px;margin:0 auto;font-size:13px;color:var(--dsw-alias-label-primary)}
+.gt-gv-toolbar{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.gt-gv-title{font-size:14px;font-weight:600}
+.gt-gv-refresh{height:26px;padding:0 10px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);border-radius:7px;cursor:pointer;font-size:12px}
+.gt-gv-refresh:hover{border-color:var(--dsw-alias-state-business-primary)}
+.gt-gv-row{display:grid;grid-template-columns:1fr 96px 88px;gap:10px;padding:10px 12px;border:1px solid var(--dsw-alias-border-l1);border-radius:10px;background:var(--dsw-alias-bg-layer-1);cursor:pointer;align-items:center}
+.gt-gv-row:hover{border-color:var(--dsw-alias-state-business-primary);background:var(--dsw-alias-bg-layer-2)}
+.gt-gv-row.active{border-color:var(--dsw-alias-state-business-primary);background:var(--dsw-alias-bg-layer-2)}
+.gt-gv-row-obj{min-width:0;color:var(--dsw-alias-label-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gt-gv-row-meta{font-size:11px;color:var(--dsw-alias-label-secondary);font-variant-numeric:tabular-nums;white-space:nowrap}
+.gt-gv-row-phase{font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;justify-self:end;text-align:center}
+.gt-gv-row-phase-active{color:var(--dsw-alias-state-success-primary);background:color-mix(in srgb, var(--dsw-alias-state-success-primary) 14%, transparent)}
+.gt-gv-row-phase-paused{color:var(--dsw-alias-state-warn-primary);background:color-mix(in srgb, var(--dsw-alias-state-warn-primary) 14%, transparent)}
+.gt-gv-row-phase-blocked{color:var(--dsw-alias-state-error-primary);background:color-mix(in srgb, var(--dsw-alias-state-error-primary) 14%, transparent)}
+.gt-gv-row-phase-complete{color:var(--dsw-alias-state-success-primary);background:color-mix(in srgb, var(--dsw-alias-state-success-primary) 14%, transparent)}
+.gt-gv-detail{display:flex;flex-direction:column;gap:10px;padding:14px;border:1px solid var(--dsw-alias-border-l1);border-radius:12px;background:var(--dsw-alias-bg-layer-1)}
+.gt-gv-detail-header{display:flex;align-items:center;gap:10px;justify-content:space-between}
+.gt-gv-back{height:26px;padding:0 10px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);border-radius:7px;cursor:pointer;font-size:12px}
+.gt-gv-back:hover{border-color:var(--dsw-alias-state-business-primary)}
+.gt-gv-section-title{font-size:11px;font-weight:600;color:var(--dsw-alias-label-secondary);text-transform:uppercase;letter-spacing:.04em}
+.gt-gv-timeline{display:flex;flex-direction:column;gap:4px;max-height:180px;overflow-y:auto;border:1px solid var(--dsw-alias-border-l1);border-radius:8px;padding:6px 10px;background:var(--dsw-alias-bg-base)}
+.gt-gv-tl-row{display:grid;grid-template-columns:120px 90px 1fr;gap:8px;font-size:12px;align-items:baseline}
+.gt-gv-tl-time{font-variant-numeric:tabular-nums;color:var(--dsw-alias-label-tertiary)}
+.gt-gv-tl-op{font-weight:600;color:var(--dsw-alias-label-secondary)}
+.gt-gv-tl-rev{color:var(--dsw-alias-label-secondary);font-variant-numeric:tabular-nums}
+.gt-gv-result{max-height:200px;overflow-y:auto;border:1px solid var(--dsw-alias-border-l1);border-radius:8px;padding:8px 10px;background:var(--dsw-alias-bg-base);white-space:pre-wrap;line-height:1.5;font-size:12px}
+.gt-gv-empty{color:var(--dsw-alias-label-secondary);text-align:center;padding:24px;font-size:12px}
 `;
     const tagId = "@dsh-plugins/goal-tracker";
     if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=" + JSON.stringify(tagId) + "]") === null) {
@@ -90,7 +117,6 @@ window.__ModuleLoader__.load({
       document.head.appendChild(tag);
     }
 
-    /** Hard service dependencies resolved by the client runtime. */
     const inject = ["slots"];
 
 function apply(ctx){
@@ -119,6 +145,7 @@ function apply(ctx){
       blocked: zh ? '受阻' : 'Blocked',
       complete: zh ? '已完成' : 'Completed',
       round: zh ? '轮次' : 'Round',
+      elapsed: zh ? '耗时' : 'elapsed',
       goal: zh ? '目标' : 'GOAL',
       created: zh ? '创建于' : 'Created',
       updated: zh ? '更新于' : 'Updated',
@@ -132,7 +159,6 @@ function apply(ctx){
       pause: zh ? '暂停' : 'Pause',
       resume: zh ? '恢复' : 'Resume',
       raiseCap: zh ? '提高上限' : 'Raise cap',
-      exhaustedFriendly: zh ? '轮次已跑满，目标已自动受阻；提高上限可继续推进' : 'Round budget exhausted — the goal was auto-blocked. Raise the cap to continue',
       completeBtn: zh ? '完成' : 'Complete',
       edit: zh ? '编辑' : 'Edit',
       clear: zh ? '清除' : 'Clear',
@@ -140,7 +166,7 @@ function apply(ctx){
       cancel: zh ? '取消' : 'Cancel',
       newGoal: zh ? '＋ 新建目标' : '+ New goal',
       objectivePh: zh ? '目标内容…' : 'Goal objective…',
-      roundsPh: zh ? '轮数上限' : 'Max rounds',
+      roundsPh: zh ? '轮数上限' : 'Round cap',
       justNow: zh ? '刚刚' : 'just now',
       minAgo: zh ? '分钟前' : 'min ago',
       hrAgo: zh ? '小时前' : 'h ago',
@@ -166,6 +192,20 @@ function apply(ctx){
       unlimitedToggle: zh ? '无限轮次' : 'Unlimited rounds',
       unlimitedText: zh ? '无限' : '∞',
       policyHint: zh ? '策略会写入目标文本，agent 每轮都会看到并遵守；轮次上限由驱动器硬性执行（跑满自动受阻）；无限模式永不自行完成，直到用户暂停/清除' : 'The policy is written into the objective so the agent sees it every round; the round cap is enforced by the driver (auto-blocked when exhausted); unlimited mode never self-completes until the user pauses or clears',
+      exhaustedFriendly: zh ? '轮次已跑满，目标已自动受阻；提高上限可继续推进' : 'Round budget exhausted — the goal was auto-blocked. Raise the cap to continue',
+      // Goals-history tab
+      gvTabLabel: zh ? '目标' : 'Goals',
+      gvTitle: zh ? '目标历史' : 'Goal history',
+      gvRefresh: zh ? '刷新' : 'Refresh',
+      gvEmpty: zh ? '当前会话暂无目标历史。创建一个目标试试。' : 'No goal history yet for this session. Create one to get started.',
+      gvNoResult: zh ? '（无运行结果文本）' : '(no result text available)',
+      gvBack: zh ? '← 返回列表' : '← Back to list',
+      gvSectionObjective: zh ? '目标' : 'Objective',
+      gvSectionPolicy: zh ? '完成策略' : 'Completion policy',
+      gvSectionStatus: zh ? '状态' : 'Status',
+      gvSectionTimeline: zh ? '修改记录' : 'Modification history',
+      gvSectionResult: zh ? '运行结果' : 'Run result',
+      gvRunMeta: zh ? '（AI 最终回复）' : '(AI final reply)',
     }
 
     function formatDuration(ms) {
@@ -198,27 +238,19 @@ function apply(ctx){
       return Math.floor(h / 24) + ' ' + T.daysAgo
     }
 
+    function formatShortClock(epochMs) {
+      if (!(epochMs > 0)) return '—'
+      const d = new Date(epochMs)
+      const p = (n) => (n < 10 ? '0' + n : String(n))
+      return (d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes())
+    }
+
     function num(v) {
       const n = parseInt(String(v), 10)
       return Number.isFinite(n) && n > 0 ? n : 0
     }
 
-    // Completion-policy block embedded in the objective (agent-readable).
-    // Uses full-width brackets ［］ in stored text; parsing accepts both.
     const POLICY_RE = /[\[［]完成策略：[^\]］]*[\]］]/g
-
-    function buildPolicy(mode, min, max) {
-      if (mode === 'rounds') return '［完成策略：必须执行完 ' + (max > 0 ? max : 16) + ' 轮后才可完成］'
-      if (mode === 'hybrid') {
-        const parts = []
-        if (min > 0) parts.push('最少 ' + min + ' 轮')
-        if (max > 0) parts.push('最多 ' + max + ' 轮')
-        if (parts.length === 0) return ''
-        return '［完成策略：agent 决定完成时机，但' + parts.join('、') + '］'
-      }
-      if (mode === 'unlimited') return '［完成策略：无限执行，持续推进直到用户手动停止，不得自行完成］'
-      return ''
-    }
 
     function parsePolicy(objective) {
       const blocks = objective.match(POLICY_RE) || []
@@ -237,6 +269,124 @@ function apply(ctx){
       return { mode: 'agent', min: 0, max: 0, clean: clean }
     }
 
+    // ── GoalsHistoryView ────────────────────────────────────────────────────
+    function GoalsHistoryView(props) {
+      const sessionId = props.sessionId
+      const [history, setHistory] = react.useState(null)
+      const [loading, setLoading] = react.useState(false)
+      const [error, setError] = react.useState(null)
+      const [selectedId, setSelectedId] = react.useState(null)
+
+      const load = react.useCallback(() => {
+        if (!sessionId) return
+        const h = typeof host !== 'undefined' && typeof host.call === 'function' ? host : null
+        if (!h) { setError('host bridge unavailable'); return }
+        setLoading(true); setError(null)
+        h.call('goal/history', { sessionId: sessionId }).then((r) => {
+          setLoading(false)
+          if (r && r.ok && Array.isArray(r.goals)) {
+            setHistory(r.goals)
+            if (selectedId && !r.goals.find((g) => g.id === selectedId)) setSelectedId(null)
+          } else {
+            setError(r && r.message ? r.message : 'failed to load history')
+            setHistory([])
+          }
+        }).catch((e) => { setLoading(false); setError(String(e && e.message || e)); setHistory([]) })
+      }, [sessionId, selectedId])
+
+      react.useEffect(() => { load() }, [load])
+
+      const goals = history || []
+      const selected = selectedId ? goals.find((g) => g.id === selectedId) : null
+
+      const toolbar = react.createElement('div', { className: 'gt-gv-toolbar' }, [
+        react.createElement('span', { key: 't', className: 'gt-gv-title' }, T.gvTitle + ' (' + goals.length + ')'),
+        react.createElement('button', { key: 'r', className: 'gt-gv-refresh', onClick: load, disabled: loading },
+          loading ? '…' : T.gvRefresh),
+      ])
+
+      if (selected) {
+        const policy = parsePolicy(selected.objective || '')
+        const opLabel = (op) => ({ create: T.create, edit: zh ? '编辑' : 'edit', pause: T.pause, resume: T.resume, complete: T.completeBtn, clear: T.clear, block: T.blocked }[op] || op)
+        const timelineRows = (selected.revisions || []).map((rv) => react.createElement('div', { key: rv.seq, className: 'gt-gv-tl-row' }, [
+          react.createElement('span', { className: 'gt-gv-tl-time' }, formatShortClock(rv.time)),
+          react.createElement('span', { className: 'gt-gv-tl-op' }, opLabel(rv.operation)),
+          react.createElement('span', { className: 'gt-gv-tl-rev' }, 'rev ' + rv.revision),
+        ]))
+        const modeLabel = policy.mode === 'rounds' ? T.modeRounds + '（' + (policy.max > 0 ? policy.max : selected.maxGoalRounds) + '）'
+          : policy.mode === 'hybrid' ? T.modeHybrid + (policy.min > 0 ? '（最少 ' + policy.min + '）' : '') + (policy.max > 0 ? '（最多 ' + policy.max + '）' : '')
+          : policy.mode === 'unlimited' ? T.modeUnlimited
+          : T.modeAgent
+        const rows = [
+          [T.goal, selected.objective],
+          [T.round, selected.roundsStarted + ' / ' + (selected.maxGoalRounds >= UNLIMITED ? T.unlimitedText : selected.maxGoalRounds)],
+          [T.progress, (selected.maxGoalRounds >= UNLIMITED ? '' : Math.min(100, Math.round((selected.roundsStarted / selected.maxGoalRounds) * 100))) + '%'],
+          [T.policy, modeLabel],
+          [T.activation, selected.activation || '—'],
+          [T.created, formatClock(selected.createdAt)],
+          [T.updated, formatClock(selected.updatedAt)],
+          [T.revision, String(selected.revision)],
+        ]
+        const detailRows = rows.map((pair) => react.createElement('div', { key: pair[0], className: 'gt-row' },
+          react.createElement('span', { className: 'gt-row-k' }, pair[0]),
+          react.createElement('span', { className: 'gt-row-v' }, String(pair[1] || '—'))))
+        const resultText = selected.runResult && typeof selected.runResult.text === 'string' ? selected.runResult.text : null
+
+        return react.createElement('div', { className: 'gt-gv-list' }, [
+          react.createElement('div', { key: 'tb', className: 'gt-gv-toolbar' }, [
+            react.createElement('button', { className: 'gt-gv-back', onClick: () => setSelectedId(null) }, T.gvBack),
+            react.createElement('button', { className: 'gt-gv-refresh', onClick: load, disabled: loading }, loading ? '…' : T.gvRefresh),
+          ]),
+          react.createElement('div', { key: 'd', className: 'gt-gv-detail' }, [
+            react.createElement('div', { key: 'h', className: 'gt-gv-section-title' }, T.gvSectionObjective + ' · ' + T.gvSectionStatus + ' · ' + T.gvSectionPolicy),
+            ...detailRows,
+            react.createElement('div', { key: 'tl', className: 'gt-gv-section-title', style: { marginTop: 6 } }, T.gvSectionTimeline),
+            react.createElement('div', { className: 'gt-gv-timeline' }, timelineRows),
+            react.createElement('div', { key: 'rr', className: 'gt-gv-section-title', style: { marginTop: 6 } }, T.gvSectionResult + ' ' + T.gvRunMeta),
+            resultText
+              ? react.createElement('div', { className: 'gt-gv-result' }, resultText)
+              : react.createElement('div', { className: 'gt-gv-result', style: { color: 'var(--dsw-alias-label-secondary)' } }, T.gvNoResult),
+          ]),
+        ])
+      }
+
+      if (loading && history === null) {
+        return react.createElement('div', { className: 'gt-gv-list' }, [
+          toolbar,
+          react.createElement('div', { className: 'gt-gv-empty' }, '…'),
+        ])
+      }
+      if (error && goals.length === 0) {
+        return react.createElement('div', { className: 'gt-gv-list' }, [
+          toolbar,
+          react.createElement('div', { className: 'gt-gv-empty' }, error),
+        ])
+      }
+      if (goals.length === 0) {
+        return react.createElement('div', { className: 'gt-gv-list' }, [
+          toolbar,
+          react.createElement('div', { className: 'gt-gv-empty' }, T.gvEmpty),
+        ])
+      }
+      const listRows = goals.map((g) => {
+        const objText = parsePolicy(g.objective || '').clean || g.objective || ''
+        const updated = formatShortClock(g.updatedAt)
+        return react.createElement('div', {
+          key: g.id, className: 'gt-gv-row' + (selectedId === g.id ? ' active' : ''),
+          onClick: () => setSelectedId(g.id),
+        }, [
+          react.createElement('span', { className: 'gt-gv-row-obj', title: objText }, objText || '—'),
+          react.createElement('span', { className: 'gt-gv-row-meta' }, updated),
+          react.createElement('span', { className: 'gt-gv-row-phase gt-gv-row-phase-' + g.phase }, g.phase === 'complete' ? T.complete : g.phase === 'active' ? T.running : g.phase === 'paused' ? T.paused : g.phase === 'blocked' ? T.blocked : g.phase),
+        ])
+      })
+      return react.createElement('div', { className: 'gt-gv-list' }, [
+        toolbar,
+        ...listRows,
+      ])
+    }
+
+    // ── GoalTracker (existing dock) ────────────────────────────────────────
     function GoalTracker(props) {
       const sessionId = props.sessionId
       const projection = typeof props.useProjection === 'function' ? props.useProjection('goal') : null
@@ -266,8 +416,6 @@ function apply(ctx){
         return dispose
       }, [])
 
-      // Prefill the policy editor with the goal's CURRENT mode when opened,
-      // so a stray apply cannot silently strip or change the policy.
       const parsedPolicyRef = react.useRef(null)
       react.useEffect(() => {
         if (!expanded) return
@@ -281,13 +429,8 @@ function apply(ctx){
       const goal = projection && typeof projection === 'object' ? projection.goal : null
       const canRemote = !!(remoteGoals && sessionId)
 
-      // Live rounds bridge: the client goal projection only refreshes on
-      // goal/change mutations, so poll the host GoalView for the live round
-      // count (and activation) while a goal exists.
       const goalId = goal ? goal.id : null
       react.useEffect(() => {
-        // `host` is a dynamic-package builtin; the static client module does
-        // not provide it, so the bridge silently degrades to the projection.
         const h = typeof host !== 'undefined' && typeof host.call === 'function' ? host : null
         if (!goalId || !sessionId || !h) return undefined
         let alive = true
@@ -312,7 +455,6 @@ function apply(ctx){
           if (result && result.ok === false) {
             const err = result.error || {}
             const raw = (err.message || '') + (err.code ? ' (' + err.code + ')' : '')
-            // Friendly mapping for the exhausted-round resume rejection.
             if ((err.code === 'GOAL_INVALID_TRANSITION' || /exhausted/i.test(err.message || '')) && /maxGoalRounds|rounds/i.test(err.message || '')) {
               setActionError(T.exhaustedFriendly)
             } else {
@@ -329,7 +471,6 @@ function apply(ctx){
         }
       }
 
-      // ── no goal: create entry ─────────────────────────────────────────────
       if (!goal) {
         if (!canRemote || typeof remoteGoals.create !== 'function') return null
         if (!creating) {
@@ -360,53 +501,24 @@ function apply(ctx){
         }
         return react.createElement('div', { className: 'gt-dock' }, [
           react.createElement('div', { key: 'form', className: 'gt-form' }, [
-            react.createElement('input', {
-              key: 'obj', className: 'gt-input', type: 'text',
-              placeholder: T.objectivePh, value: createDraft,
-              disabled: pending,
-              onChange: (e) => setCreateDraft(e.target.value),
-              onKeyDown: (e) => { if (e.key === 'Enter') doCreate() },
-              autoFocus: true,
-            }),
-            react.createElement('input', {
-              key: 'rounds', className: 'gt-input gt-input-num', type: 'number', min: '1',
-              title: T.roundsTip, placeholder: '16', value: createUnlimited ? '' : createRounds,
-              disabled: pending || createUnlimited,
-              onChange: (e) => setCreateRounds(e.target.value),
-              onKeyDown: (e) => { if (e.key === 'Enter') doCreate() },
-            }),
+            react.createElement('input', { key: 'obj', className: 'gt-input', type: 'text', placeholder: T.objectivePh, value: createDraft, disabled: pending, onChange: (e) => setCreateDraft(e.target.value), onKeyDown: (e) => { if (e.key === 'Enter') doCreate() }, autoFocus: true }),
+            react.createElement('input', { key: 'rounds', className: 'gt-input gt-input-num', type: 'number', min: '1', title: T.roundsTip, placeholder: '16', value: createUnlimited ? '' : createRounds, disabled: pending || createUnlimited, onChange: (e) => setCreateRounds(e.target.value), onKeyDown: (e) => { if (e.key === 'Enter') doCreate() } }),
             react.createElement('label', { key: 'unl', className: 'gt-check' },
-              react.createElement('input', {
-                type: 'checkbox', checked: createUnlimited,
-                disabled: pending,
-                onChange: (e) => setCreateUnlimited(e.target.checked),
-              }),
+              react.createElement('input', { type: 'checkbox', checked: createUnlimited, disabled: pending, onChange: (e) => setCreateUnlimited(e.target.checked) }),
               T.unlimitedToggle),
-            react.createElement('button', {
-              key: 'create', type: 'button', className: 'gt-icon-btn',
-              title: T.create, 'aria-label': T.create,
-              disabled: pending || createDraft.trim() === '',
-              onClick: () => doCreate(),
-            }, '＋'),
-            react.createElement('button', {
-              key: 'cancel', type: 'button', className: 'gt-icon-btn',
-              title: T.cancel, 'aria-label': T.cancel,
-              disabled: pending,
-              onClick: () => { setCreating(false); setCreateDraft(''); setCreateRounds('16'); setCreateUnlimited(false) },
-            }, '×'),
+            react.createElement('button', { key: 'create', type: 'button', className: 'gt-icon-btn', title: T.create, 'aria-label': T.create, disabled: pending || createDraft.trim() === '', onClick: () => doCreate() }, '\uFF0B'),
+            react.createElement('button', { key: 'cancel', type: 'button', className: 'gt-icon-btn', title: T.cancel, 'aria-label': T.cancel, disabled: pending, onClick: () => { setCreating(false); setCreateDraft(''); setCreateRounds('16'); setCreateUnlimited(false) } }, '\u00D7'),
           ]),
           actionError !== null && react.createElement('div', { key: 'err', className: 'gt-banner gt-banner-error', role: 'alert' }, actionError),
         ])
       }
 
-      // ── goal exists ────────────────────────────────────────────────────────
       const rawObjective = typeof goal.objective === 'string' ? goal.objective : ''
       const policy = parsePolicy(rawObjective)
       parsedPolicyRef.current = policy
       const objective = policy.clean
       const phase = (goal.phase === 'active' || goal.phase === 'paused' || goal.phase === 'blocked' || goal.phase === 'complete')
-        ? goal.phase
-        : 'active'
+        ? goal.phase : 'active'
       const maxRounds = typeof goal.maxGoalRounds === 'number' && goal.maxGoalRounds > 0 ? goal.maxGoalRounds : 1
       const unlimited = maxRounds >= UNLIMITED
       const rounds = typeof projection.roundsStarted === 'number' ? projection.roundsStarted : 0
@@ -416,14 +528,11 @@ function apply(ctx){
       const updatedAt = typeof projection.updatedAt === 'number' ? projection.updatedAt : 0
       const revision = typeof goal.revision === 'number' ? goal.revision : 0
       const blocked = goal.blockedReason && typeof goal.blockedReason === 'object' ? goal.blockedReason : null
-      // Exhausted only while the CURRENT cap is still reached: raising the cap
-      // makes resume legal again even though the blocked reason still says round-limit.
       const exhausted = blocked !== null && blocked.code === 'round-limit' && displayRounds >= maxRounds
 
       const percent = unlimited ? Math.min(100, Math.round((displayRounds / 9999) * 100)) : Math.min(100, Math.round((displayRounds / maxRounds) * 100))
       const elapsedMs = phase === 'complete' ? (updatedAt - createdAt) : (now - createdAt)
       const phaseLabel = phase === 'active' ? T.running : phase === 'paused' ? T.paused : phase === 'blocked' ? T.blocked : T.complete
-      const glyph = phase === 'active' ? '●' : phase === 'paused' ? '⏸' : phase === 'blocked' ? '⚠' : '✓'
       const refOf = { id: goal.id, revision }
 
       const verbs = canRemote ? {
@@ -440,12 +549,7 @@ function apply(ctx){
       } : null
 
       const stop = (e) => { e.stopPropagation() }
-      const iconBtn = (key, label, glyphText, onClick, disabled) => react.createElement('button', {
-        key, type: 'button', className: 'gt-icon-btn',
-        title: label, 'aria-label': label,
-        disabled: disabled || pending,
-        onClick: (e) => { stop(e); onClick() },
-      }, glyphText)
+      const iconBtn = (key, label, glyphText, onClick, disabled) => react.createElement('button', { key, type: 'button', className: 'gt-icon-btn', title: label, 'aria-label': label, disabled: disabled || pending, onClick: (e) => { stop(e); onClick() } }, glyphText)
 
       let policyShort = null
       if (policy.mode === 'rounds') policyShort = T.policyShortRounds + ' ' + (policy.max > 0 ? policy.max : maxRounds) + T.policyShortRoundsTail
@@ -453,17 +557,14 @@ function apply(ctx){
         const parts = []
         if (policy.min > 0) parts.push(T.policyShortHybridMin + ' ' + policy.min)
         if (policy.max > 0) parts.push(T.policyShortHybridMax + ' ' + policy.max)
-        policyShort = parts.join('·')
+        policyShort = parts.join('\u00B7')
       } else if (policy.mode === 'unlimited') policyShort = T.policyShortUnlimited
       else policyShort = T.policyShortAgent
 
-      const modeLabel = policy.mode === 'rounds'
-        ? T.modeRounds + '（' + (policy.max > 0 ? policy.max : maxRounds) + '）'
-        : policy.mode === 'hybrid'
-          ? T.modeHybrid + (policy.min > 0 ? '（最少 ' + policy.min + '）' : '') + (policy.max > 0 ? '（最多 ' + policy.max + '）' : '')
-          : policy.mode === 'unlimited' ? T.modeUnlimited : T.modeAgent
+      const modeLabel = policy.mode === 'rounds' ? T.modeRounds + '（' + (policy.max > 0 ? policy.max : maxRounds) + '）'
+        : policy.mode === 'hybrid' ? T.modeHybrid + (policy.min > 0 ? '（最少 ' + policy.min + '）' : '') + (policy.max > 0 ? '（最多 ' + policy.max + '）' : '')
+        : policy.mode === 'unlimited' ? T.modeUnlimited : T.modeAgent
 
-      // edit mode: inline form replacing the bar
       if (editing) {
         const saveEdit = () => {
           const trimmed = draft.trim()
@@ -472,30 +573,14 @@ function apply(ctx){
           const nextObjective = trimmed + (block ? '\n\n' + block : '')
           runAction(() => verbs.edit(nextObjective, roundsDraft)).then((result) => {
             if (result && result.ok === false) return
-            setEditing(false)
-            setDraft('')
-            setRoundsDraft('')
+            setEditing(false); setDraft(''); setRoundsDraft('')
           })
         }
         const formChildren = [
-          react.createElement('input', {
-            key: 'obj', className: 'gt-input', type: 'text',
-            placeholder: T.objectivePh, value: draft,
-            disabled: pending,
-            onChange: (e) => setDraft(e.target.value),
-            onKeyDown: (e) => { if (e.key === 'Enter') saveEdit() },
-            autoFocus: true,
-          }),
-          react.createElement('input', {
-            key: 'rounds', className: 'gt-input gt-input-num', type: 'number', min: '1',
-            title: T.roundsTip, placeholder: unlimited ? T.unlimitedText : String(maxRounds),
-            value: unlimited && roundsDraft === '' ? '' : roundsDraft,
-            disabled: pending,
-            onChange: (e) => setRoundsDraft(e.target.value),
-            onKeyDown: (e) => { if (e.key === 'Enter') saveEdit() },
-          }),
-          iconBtn('save', T.save, '✓', saveEdit, draft.trim() === ''),
-          iconBtn('cancel', T.cancel, '×', () => { setEditing(false); setDraft(''); setRoundsDraft('') }),
+          react.createElement('input', { key: 'obj', className: 'gt-input', type: 'text', placeholder: T.objectivePh, value: draft, disabled: pending, onChange: (e) => setDraft(e.target.value), onKeyDown: (e) => { if (e.key === 'Enter') saveEdit() }, autoFocus: true }),
+          react.createElement('input', { key: 'rounds', className: 'gt-input gt-input-num', type: 'number', min: '1', title: T.roundsTip, placeholder: unlimited ? T.unlimitedText : String(maxRounds), value: unlimited && roundsDraft === '' ? '' : roundsDraft, disabled: pending, onChange: (e) => setRoundsDraft(e.target.value), onKeyDown: (e) => { if (e.key === 'Enter') saveEdit() } }),
+          iconBtn('save', T.save, '\u2705', saveEdit, draft.trim() === ''),
+          iconBtn('cancel', T.cancel, '\u00D7', () => { setEditing(false); setDraft(''); setRoundsDraft('') }),
         ]
         return react.createElement('div', { className: 'gt-dock' }, [
           react.createElement('div', { key: 'form', className: 'gt-form' }, formChildren),
@@ -503,12 +588,9 @@ function apply(ctx){
         ])
       }
 
-      // normal bar
       const meta = react.createElement('div', { key: 'meta', className: 'gt-meta' }, [
-        phase !== 'complete' && react.createElement('span', { key: 'rounds', className: 'gt-rounds', title: T.roundsTip },
-          T.round + ' ' + displayRounds + '/' + (unlimited ? T.unlimitedText : maxRounds)),
-        phase !== 'complete' && react.createElement('div', { key: 'track', className: 'gt-track' },
-          react.createElement('div', { key: 'fill', className: 'gt-fill gt-fill-' + phase, style: { width: percent + '%' } })),
+        phase !== 'complete' && react.createElement('span', { key: 'rounds', className: 'gt-rounds', title: T.roundsTip }, T.round + ' ' + displayRounds + '/' + (unlimited ? T.unlimitedText : maxRounds)),
+        phase !== 'complete' && react.createElement('div', { key: 'track', className: 'gt-track' }, react.createElement('div', { key: 'fill', className: 'gt-fill gt-fill-' + phase, style: { width: percent + '%' } })),
         phase !== 'complete' && react.createElement('span', { key: 'pct', className: 'gt-percent' }, percent + '%'),
         react.createElement('span', { key: 'elapsed', className: 'gt-elapsed' }, formatDuration(elapsedMs)),
         react.createElement('span', { key: 'rev', className: 'gt-rev', title: T.revTip }, 'rev ' + revision),
@@ -516,36 +598,21 @@ function apply(ctx){
 
       const controls = []
       if (verbs) {
-        if (phase === 'active' && verbs.pause) controls.push(iconBtn('pause', T.pause, '⏸', () => runAction(verbs.pause)))
-        if (phase === 'blocked' && exhausted && verbs.edit) {
-          // Round budget exhausted: resume would be rejected; offer raising the cap.
-          controls.push(iconBtn('raise', T.raiseCap, '↥', () => { setDraft(objective); setRoundsDraft(''); setEditing(true) }))
-        } else if ((phase === 'paused' || phase === 'blocked') && verbs.resume) {
-          controls.push(iconBtn('resume', T.resume, '▶', () => runAction(verbs.resume)))
-        }
-        // In unlimited mode the goal must never be completed: no ✓ button.
-        if (phase === 'active' && !unlimited && verbs.complete) controls.push(iconBtn('complete', T.completeBtn, '✓', () => runAction(verbs.complete)))
-        if (verbs.edit) controls.push(iconBtn('edit', T.edit, '✎', () => { setDraft(objective); setRoundsDraft(''); setEditing(true) }))
-        if (verbs.clear) controls.push(iconBtn('clear', T.clear, '×', () => runAction(verbs.clear)))
+        if (phase === 'active' && verbs.pause) controls.push(iconBtn('pause', T.pause, '\u23F8', () => runAction(verbs.pause)))
+        if (phase === 'blocked' && exhausted && verbs.edit) controls.push(iconBtn('raise', T.raiseCap, '\u21A5', () => { setDraft(objective); setRoundsDraft(''); setEditing(true) }))
+        else if ((phase === 'paused' || phase === 'blocked') && verbs.resume) controls.push(iconBtn('resume', T.resume, '\u25B6', () => runAction(verbs.resume)))
+        if (phase === 'active' && !unlimited && verbs.complete) controls.push(iconBtn('complete', T.completeBtn, '\u2705', () => runAction(verbs.complete)))
+        if (verbs.edit) controls.push(iconBtn('edit', T.edit, '\u270E', () => { setDraft(objective); setRoundsDraft(''); setEditing(true) }))
+        if (verbs.clear) controls.push(iconBtn('clear', T.clear, '\u00D7', () => runAction(verbs.clear)))
       }
-      controls.push(react.createElement('span', {
-        key: 'chevron', className: 'gt-chevron',
-        onClick: (e) => { stop(e); setExpanded(!expanded) },
-      }, expanded ? '▾' : '▸'))
+      controls.push(react.createElement('span', { key: 'chevron', className: 'gt-chevron', onClick: (e) => { stop(e); setExpanded(!expanded) } }, expanded ? '\u25BE' : '\u25B8'))
 
       const bar = react.createElement('div', {
         className: 'gt-bar gt-bar-' + phase,
-        role: 'button',
-        tabIndex: 0,
-        'aria-expanded': expanded,
+        role: 'button', tabIndex: 0, 'aria-expanded': expanded,
         title: phase === 'blocked' && blocked && typeof blocked.message === 'string' ? blocked.message : objective,
         onClick: () => setExpanded(!expanded),
-        onKeyDown: (e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault()
-            setExpanded(!expanded)
-          }
-        },
+        onKeyDown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpanded(!expanded) } },
       }, [
         react.createElement('span', { key: 'chip', className: 'gt-chip gt-chip-' + phase }, phaseLabel),
         react.createElement('span', { key: 'policy', className: 'gt-policy-chip', title: T.policy + '：' + modeLabel }, policyShort),
@@ -557,11 +624,8 @@ function apply(ctx){
       const banners = []
       if (blocked) {
         let blockedText = null
-        if (exhausted) {
-          blockedText = (zh ? '轮次已跑满（' : 'Round budget exhausted (') + displayRounds + '/' + (unlimited ? T.unlimitedText : maxRounds) + (zh ? '），目标已自动受阻；提高上限可继续推进' : ') — the goal was auto-blocked. Raise the cap to continue')
-        } else if (typeof blocked.message === 'string' && blocked.message !== '') {
-          blockedText = blocked.message
-        }
+        if (exhausted) blockedText = (zh ? '轮次已跑满（' : 'Round budget exhausted (') + displayRounds + '/' + (unlimited ? T.unlimitedText : maxRounds) + (zh ? '），目标已自动受阻；提高上限可继续推进' : ') — the goal was auto-blocked. Raise the cap to continue')
+        else if (typeof blocked.message === 'string' && blocked.message !== '') blockedText = blocked.message
         if (blockedText !== null) {
           banners.push(react.createElement('div', { key: 'blocked', className: 'gt-banner gt-banner-blocked', role: 'alert' }, [
             react.createElement('span', { key: 'code', className: 'gt-banner-code' }, T.blocked),
@@ -569,9 +633,7 @@ function apply(ctx){
           ]))
         }
       }
-      if (actionError !== null) {
-        banners.push(react.createElement('div', { key: 'err', className: 'gt-banner gt-banner-error', role: 'alert' }, actionError))
-      }
+      if (actionError !== null) banners.push(react.createElement('div', { key: 'err', className: 'gt-banner gt-banner-error', role: 'alert' }, actionError))
 
       let detail = null
       if (expanded) {
@@ -594,70 +656,40 @@ function apply(ctx){
           react.createElement('span', { className: 'gt-row-k' }, pair[0]),
           react.createElement('span', { className: 'gt-row-v' }, String(pair[1]))))
         const detailChildren = [rowEls]
-        if (blocked) {
-          detailChildren.push(react.createElement('div', { key: 'blocked', className: 'gt-blocked' },
-            react.createElement('span', { className: 'gt-row-k' },
-              T.reason + (typeof blocked.code === 'string' ? ' · ' + blocked.code : '')),
-            react.createElement('span', { className: 'gt-row-v' },
-              typeof blocked.message === 'string' ? blocked.message : '')))
-        }
-        // completion-policy editor
+        if (blocked) detailChildren.push(react.createElement('div', { key: 'blocked', className: 'gt-blocked' },
+          react.createElement('span', { className: 'gt-row-k' }, T.reason + (typeof blocked.code === 'string' ? ' · ' + blocked.code : '')),
+          react.createElement('span', { className: 'gt-row-v' }, typeof blocked.message === 'string' ? blocked.message : '')))
         if (verbs && verbs.edit) {
           const applyPolicy = () => {
-            // Debounce: ignore re-entrant applies within 800ms (a duplicated
-            // click must not run the mutation twice with reset state).
             const t = typeof Date !== 'undefined' ? Date.now() : 0
             if (t - lastApplyAt.current < 800) return
             lastApplyAt.current = t
             const mMode = modeDraft
-            const mMin = num(minDraft)
-            const mMax = num(maxDraft)
+            const mMin = num(minDraft); const mMax = num(maxDraft)
             let nextMax = maxRounds
             if (mMode === 'rounds') nextMax = mMax > 0 ? mMax : 16
             else if (mMode === 'hybrid') nextMax = mMax > 0 ? mMax : maxRounds
             else if (mMode === 'unlimited') nextMax = UNLIMITED
-            else nextMax = mMax > 0 ? mMax : maxRounds // agent: cap adjustable, no policy block
+            else nextMax = mMax > 0 ? mMax : maxRounds
             const block = buildPolicy(mMode, mMin, mMax)
             const nextObjective = objective + (block ? '\n\n' + block : '')
             runAction(() => verbs.edit(nextObjective, String(nextMax))).then((result) => {
               if (result && result.ok === false) return
-              // Keep the editor state as applied (no reset race); close panel.
               setExpanded(false)
             })
           }
           const policyChildren = [
             react.createElement('div', { key: 'row1', className: 'gt-policy-row' }, [
               react.createElement('span', { key: 'lbl', className: 'gt-row-k' }, T.policy),
-              react.createElement('select', {
-                key: 'mode', className: 'gt-select', value: modeDraft,
-                disabled: pending,
-                onChange: (e) => setModeDraft(e.target.value),
-              }, [
+              react.createElement('select', { key: 'mode', className: 'gt-select', value: modeDraft, disabled: pending, onChange: (e) => setModeDraft(e.target.value) }, [
                 react.createElement('option', { key: 'agent', value: 'agent' }, T.modeAgent),
                 react.createElement('option', { key: 'rounds', value: 'rounds' }, T.modeRounds),
                 react.createElement('option', { key: 'hybrid', value: 'hybrid' }, T.modeHybrid),
                 react.createElement('option', { key: 'unlimited', value: 'unlimited' }, T.modeUnlimited),
               ]),
-              modeDraft !== 'unlimited' && react.createElement('input', {
-                key: 'max', className: 'gt-input gt-input-num', type: 'number', min: '1',
-                title: modeDraft === 'agent' ? T.maxRoundsLabel : T.maxLabel,
-                placeholder: modeDraft === 'agent' ? T.maxRoundsLabel : T.maxLabel,
-                value: maxDraft,
-                disabled: pending,
-                onChange: (e) => setMaxDraft(e.target.value),
-              }),
-              modeDraft === 'hybrid' && react.createElement('input', {
-                key: 'min', className: 'gt-input gt-input-num', type: 'number', min: '1',
-                title: T.minLabel, placeholder: T.minLabel, value: minDraft,
-                disabled: pending,
-                onChange: (e) => setMinDraft(e.target.value),
-              }),
-              react.createElement('button', {
-                key: 'apply', type: 'button', className: 'gt-icon-btn',
-                title: T.applyPolicy, 'aria-label': T.applyPolicy,
-                disabled: pending,
-                onClick: (e) => { stop(e); applyPolicy() },
-              }, '✓'),
+              modeDraft !== 'unlimited' && react.createElement('input', { key: 'max', className: 'gt-input gt-input-num', type: 'number', min: '1', title: modeDraft === 'agent' ? T.maxRoundsLabel : T.maxLabel, placeholder: modeDraft === 'agent' ? T.maxRoundsLabel : T.maxLabel, value: maxDraft, disabled: pending, onChange: (e) => setMaxDraft(e.target.value) }),
+              modeDraft === 'hybrid' && react.createElement('input', { key: 'min', className: 'gt-input gt-input-num', type: 'number', min: '1', title: T.minLabel, placeholder: T.minLabel, value: minDraft, disabled: pending, onChange: (e) => setMinDraft(e.target.value) }),
+              react.createElement('button', { key: 'apply', type: 'button', className: 'gt-icon-btn', title: T.applyPolicy, 'aria-label': T.applyPolicy, disabled: pending, onClick: (e) => { stop(e); applyPolicy() } }, '\u2705'),
             ]),
             react.createElement('div', { key: 'hint', className: 'gt-policy-hint' }, T.policyHint),
           ]
@@ -669,9 +701,14 @@ function apply(ctx){
       return react.createElement('div', { className: 'gt-dock', 'data-goal-tracker': true }, [bar, banners, detail])
     }
 
+    // ── Register slots ────────────────────────────────────────────────────
     slots.inject('conversation.input.dock', () => slots.register(
       { name: 'conversation.input.dock', id: 'goal-tracker', order: 20, inject: (sessionId) => ({ sessionId }) },
       (props) => react.createElement(GoalTracker, { useProjection: props.useProjection, sessionId: props.sessionId }),
+    ))
+    slots.inject('conversation.view', () => slots.register(
+      { name: 'conversation.view', id: 'goals', order: 12, label: T.gvTabLabel, inject: (sessionId) => ({ sessionId }) },
+      (props) => react.createElement(GoalsHistoryView, { sessionId: props.sessionId }),
     ))
   }
 
