@@ -32,6 +32,14 @@
     "visualization",
     "subagents"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Max-LiQingYang/dsh-plugins.git",
+    "directory": "plugins/workflow-visualizer"
+  },
   "license": "MIT",
   "peerDependencies": {
     "react": "^18.2.0"

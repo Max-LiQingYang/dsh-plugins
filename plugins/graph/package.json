@@ -1,7 +1,7 @@
 {
   "name": "@dsh-plugins/graph",
-  "version": "0.2.0",
-  "description": "LangGraph-style graph work mode for DeepSeek Harness: a `graph` model tool that runs state graphs of subagent and JS nodes with static/conditional edges, first-class cycles, and unbounded loops — plus a web tool card visualizing topology and step-by-step execution.",
+  "version": "1.0.0",
+  "description": "LangGraph-style `graph` model tool for DeepSeek Harness — runs state graphs of subagent and pure-JS nodes with static and conditional edges, first-class cycles, and unbounded loops. Ships a web tool card visualizing live execution plus an interactive Graphs tab with a drag-to-edit editor and FS-backed persistent library.",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -13,11 +13,17 @@
   "files": [
     "lib/index.js",
     "lib/engine.js",
+    "lib/library.js",
+    "lib/editor.js",
     "client.js",
     "src/",
     "test/",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md"
   ],
+  "scripts": {
+    "test": "for f in test/*.test.mjs; do node \"$f\" || exit 1; done"
+  },
   "dsh": {
     "client": {
       "platform": "web",
@@ -30,13 +36,34 @@
   "keywords": [
     "dsh",
     "deepseek-harness",
+    "deepseek",
     "plugin",
     "langgraph",
     "agent-orchestration",
+    "state-graph",
+    "subagent",
     "graph",
-    "visualization"
+    "visualization",
+    "editor",
+    "persistence"
   ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Max-LiQingYang/dsh-plugins.git",
+    "directory": "plugins/graph"
+  },
+  "bugs": {
+    "url": "https://github.com/Max-LiQingYang/dsh-plugins/issues"
+  },
+  "homepage": "https://github.com/Max-LiQingYang/dsh-plugins/tree/main/plugins/graph#readme",
   "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
   "peerDependencies": {
     "react": "^18.2.0"
   }

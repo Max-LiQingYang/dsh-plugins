@@ -69,8 +69,14 @@ OpenCode 风格的 Goal 追踪器，用于 DeepSeek Harness（DSH）Web GUI。�
 - 渲染：注册进 `conversation.input.dock` slot（list 类型，`id: "goal-tracker"`，
   `order: 20`），通过 slot 标准 props 里的 `useProjection('goal')` 钩子订阅投影；
   sessionId 通过注册选项 `inject: (sessionId) => ({ sessionId })` 注入。
+- **宿主半 RPC**（动态插件版，`src/dynamic-host.js`）：
+  - `goal/live(sessionId)` — 实时 GoalView（轮次/相位/激活态），供追踪条 2s 轮询
+  - `goal/sessions({maxN})` — 会话下拉框列表（id + 标题）
+  - `goal/history({sessionId|sessionIds[]})` — 目标历史（分组 + 时间线 + 运行结果）
 - 与内置 GoalBar（`id: "goal"`, `order: 10`）互不冲突，职责互补：内置版负责基础
   操作，本插件负责可视化 + 完整控制（含完成/新建/轮次上限编辑）。
+- **Unicode 约定**：源码中所有图形字符一律使用 `\uXXXX` 转义（如 `\u23F8`、`\u2705`），
+  避免在序列化往返中被替换成「豆腐」字符。
 
 ### 去掉内置 GoalBar（可选）
 
@@ -85,6 +91,45 @@ OpenCode 风格的 Goal 追踪器，用于 DeepSeek Harness（DSH）Web GUI。�
 重启 `dsh web` 后内置 GoalBar 与 `/goal` 命令的自定义输入气泡不再渲染（`/goal`
 命令本身是宿主侧功能，不受影响）。注意：动态插件按进程存活，重启后需重新激活
 `gtrack-1`（或用方式 B 安装为客户端模块以获得持久效果）。
+
+## 📂 目标历史子 Tab（Goals）
+
+除了 composer 上方的追踪条，插件还在会话视图注册了一个**「目标」子 Tab**
+（`conversation.view`，紧邻「对话」之后）。它把会话内所有目标（含已清除、已完成）
+聚合展示，方便回顾——不用再往上翻聊天记录。
+
+```
+[对话] [轨迹] [目标] [Workflows]        ← 视图 Tab 栏
+```
+
+### 列表
+
+| 列 | 说明 |
+|---|---|
+| 目标 | 目标文本（自动剥离「完成策略」块） |
+| 时间 | 最近变更时间 |
+| 相位 | 进行中 / 已暂停 / 受阻 / 已完成（彩色徽章） |
+
+### 详情（点击某一行）
+
+- **目标**：完整文本（含策略块原文）
+- **轮次 / 进度 / 完成策略 / 自动续跑 / 创建 / 更新 / 修订**
+- **修改记录**：时间线（时间 + 操作 + 修订号），如 `创建 → 编辑 → 受阻 → 恢复 → 完成`
+- **运行结果**：已完成目标显示 **AI 最终回复** 文本（自动从会话事件检索，无需滚动）
+
+### 跨会话
+
+Tab 顶部有一个**会话下拉框**：
+
+- 默认 = 当前会话
+- **「全部会话（合并）」** = 聚合 workspace 内最近会话的目标，按创建时间倒序
+- 其他会话 = 切换后只看该会话的目标
+
+来自其他会话的目标行会略微淡化，并附短会话标题，便于区分。
+
+> 数据来源：宿主半 RPC `goal/history`（按 sessionId 或 sessionIds[] 读取持久化会话
+> 事件，按 `goalId` 分组）+ `goal/sessions`（会话下拉框列表）。目标历史基于
+> **持久化事件**，因此重启后依然可查。
 
 ## 安装
 
